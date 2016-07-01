@@ -157,16 +157,16 @@ else
 fi
 
 if [ "$positivedifference" -gt "$critical" ] ; then
-  echo "Time difference is more than $critical seconds: $difference|diff=$difference"
+  echo "TIME CRITICAL - Time difference is more than $critical seconds: $difference|diff=$difference"
   exit 2
 fi
 
 if [ "$positivedifference" -gt "$warning" ] ; then
-  echo "Time difference is more than $warning seconds: $difference|diff=$difference"
+  echo "TIME WARNING - Time difference is more than $warning seconds: $difference|diff=$difference"
   exit 1
 fi
 
-echo "Time difference is less than $warning seconds: $difference|diff=$difference"
+echo "TIME OK - Difference is less than $warning seconds: $difference|diff=$difference"
 exit 0
 }
 
