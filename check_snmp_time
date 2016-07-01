@@ -1,5 +1,7 @@
 #!/bin/bash
 
+# PBO 2016/7/1 Added -T timezone hack for monitoring ESXi machines 
+
 # Nagios plugin to report time difference as received via SNMP compared to the local time.
 # Make sure the machine this script runs on (poller/nagios host) is using NTP.
 
@@ -17,6 +19,8 @@ echo " -w WARNING"
 echo "     The amount of seconds from where warnings start. Defaults to 60."
 echo " -c CRITICAL"
 echo "     The amount of seconds from where criticals start. Defaults to 120."
+echo " -T TIMEZONE"
+echo "     The amount of timezone seconds difference from UTC. Defaults to 0."
 exit 3
 }
 
@@ -80,6 +84,17 @@ while [ "$#" -gt 0 ] ; do
      usage
     fi
    ;;
+   -T)
+    if [ "$2" ] ; then
+     timezone="$2"
+     shift ; shift
+    else
+     echo "Missing a value for $1."
+     echo
+     shift
+     usage
+    fi
+   ;;
    *)
     echo "Unknown option $1."
     echo
@@ -111,6 +126,9 @@ fi
 if [ ! "$warning" ] ; then
   warning="60"
 fi
+if [ ! "$timezone" ] ; then
+  timezone=0
+fi
 }
 
 getandprintresults() {
@@ -130,7 +148,8 @@ rdate_s=$( date -d "$cldate $cltime sec" +%s )
 ldate_s=$(date +'%s')
 
 # If the calculated difference is negative, make it positive again for comparison.
-difference=$(($rdate_s - $ldate_s))
+difference=$(($rdate_s - $ldate_s - $timezone))
+#difference=$(($difference - $timezone))
 if [ "$difference" -lt 0 ] ; then
   positivedifference=$(($difference*-1))
 else
