@@ -7,7 +7,11 @@
 # Modified By: Kowen Houston (v1.0) https://kowenhouston.wordpress.com/2015/02/12/raspberry-pi-nagios-check-scripts/
 # Modofied By Paul Boot (v1.1 and up)
 ################################################################################
- 
+
+#NOTE: if you run this script the user executing the script probably Naemon/Nagios
+#needs to have privileges to run 'vcgencmd measure_temp' add the user to the
+#video group run 'sudo usermod -G video naemon'
+
 VERSION="Version 1.1"
 AUTHOR="Paul Boot"
  
@@ -136,7 +140,7 @@ if [[ "$tempCPU" -gt "$thresh_crit" || "$tempGPU" -gt "$thresh_crit" ]]; then
    # Temperature is greater than the critical threshold
    echo "TEMP CRITICAL - tempCPU=$tempCPU tempGPU=$tempGPU"
    exit $STATE_CRITICAL
-elif [[ "$tempCPU" -gt "$thresh_warn" || "$tempGPU" -gt "$thresh_warn" ]]; then
+elif [[ "$tempCPU" -gt "$thresh_warn" ]] || [[ "$tempGPU" -gt "$thresh_warn" ]]; then
    # Temperature is greater than the warning threshold
    echo "TEMP WARNING - tempCPU=$tempCPU tempGPU=$tempGPU"
    exit $STATE_WARNING
