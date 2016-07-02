@@ -1,4 +1,4 @@
-#!/bin/bash -x
+#!/bin/bash
  
 ################################################################################
 # Nagios plugin to monitor Raspberry Pi CPU Temp                           #
@@ -67,9 +67,8 @@ let "tempCPU=$temp_sanatized/1000"
 
 # Sanatized reading of raw temperature from GPU Sensor
 temp_sanatized=`$SENSORGPU`
-# Celcius Temperature
-
-exit
+# Remove text
+tempGPU=${temp_sanatized:5:-4}
 
 # Warning threshold
 thresh_warn=
@@ -101,8 +100,8 @@ while [ "$1" ]; do
                # Threshold is a number (Celcius)
                thresh=$2
            else
-               # Threshold is neither a number nor a percentage
-               echo "$PROGNAME: Threshold must be integer or percentage"
+               # Threshold is not a number
+               echo "$PROGNAME: Threshold must be integer"
                print_usage
                exit $STATE_UNKNOWN
            fi
@@ -133,16 +132,16 @@ elif [[ "$thresh_crit" -lt "$thresh_warn" ]]; then
    exit $STATE_UNKNOWN
 fi
  
-if [[ "$tempC" -gt "$thresh_crit" ]]; then
+if [[ "$tempCPU" -gt "$thresh_crit" || "$tempGPU" -gt "$thresh_crit" ]]; then
    # Temperature is greater than the critical threshold
-   echo "TEMPERATURE CRITICAL - $tempC"
+   echo "TEMP CRITICAL - tempCPU=$tempCPU tempGPU=$tempGPU"
    exit $STATE_CRITICAL
-elif [[ "$tempC" -gt "$thresh_warn" ]]; then
+elif [[ "$tempCPU" -gt "$thresh_warn" || "$tempGPU" -gt "$thresh_warn" ]]; then
    # Temperature is greater than the warning threshold
-   echo "TEMPERATURE WARNING - $tempC"
+   echo "TEMP WARNING - tempCPU=$tempCPU tempGPU=$tempGPU"
    exit $STATE_WARNING
 else
    # Temperature is stable
-   echo "TEMPERATURE OK - $tempC"
+   echo "TEMP OK - tempCPU=$tempCPU tempGPU=$tempGPU"
    exit $STATE_OK
 fi
