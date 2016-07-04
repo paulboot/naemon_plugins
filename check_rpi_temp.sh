@@ -137,7 +137,7 @@ elif [[ "$thresh_crit" -lt "$thresh_warn" ]]; then
 fi
 
 #Outout and performance stats
-checkOutput="tempCPU=$tempCPU°C, tempGPU=$tempGPU°C | tempCPU=$tempCPU°C;$thresh_warn;$thresh_crit;0 tempGPU=$tempGPU°C;$thresh_warn;$thresh_crit;0"
+checkOutput="tempCPU=$tempCPU°C, tempGPU=$tempGPU°C | tempCPU=$tempCPU;$thresh_warn;$thresh_crit tempGPU=$tempGPU;$thresh_warn;$thresh_crit" 
 
 if [[ "$tempCPU" -gt "$thresh_crit" || "$tempGPU" -gt "$thresh_crit" ]]; then
    # Temperature is greater than the critical threshold
