@@ -135,17 +135,20 @@ elif [[ "$thresh_crit" -lt "$thresh_warn" ]]; then
    print_usage
    exit $STATE_UNKNOWN
 fi
- 
+
+#Outout and performance stats
+checkOutput="tempCPU=$tempCPU°C, tempGPU=$tempGPU°C | tempCPU=$tempCPU°C;$thresh_warn;$thresh_crit;0 tempGPU=$tempGPU°C;$thresh_warn;$thresh_crit;0"
+
 if [[ "$tempCPU" -gt "$thresh_crit" || "$tempGPU" -gt "$thresh_crit" ]]; then
    # Temperature is greater than the critical threshold
-   echo "TEMP CRITICAL - tempCPU=$tempCPU, tempGPU=$tempGPU | tempCPU=$tempCPU tempGPU=$tempGPU"
+   echo "TEMP CRITICAL - $checkOutput"
    exit $STATE_CRITICAL
 elif [[ "$tempCPU" -gt "$thresh_warn" ]] || [[ "$tempGPU" -gt "$thresh_warn" ]]; then
    # Temperature is greater than the warning threshold
-   echo "TEMP WARNING - tempCPU=$tempCPU, tempGPU=$tempGPU | tempCPU=$tempCPU tempGPU=$tempGPU"
+   echo "TEMP WARNING - $checkOutput"
    exit $STATE_WARNING
 else
    # Temperature is stable
-   echo "TEMP OK - tempCPU=$tempCPU, tempGPU=$tempGPU | tempCPU=$tempCPU tempGPU=$tempGPU"
+   echo "TEMP OK - $checkOutput"
    exit $STATE_OK
 fi
