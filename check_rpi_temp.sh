@@ -20,6 +20,14 @@ PROGNAME="check_rpi_temp.sh"
 # Constants
 SENSORCPU='/sys/class/thermal/thermal_zone0/temp'
 SENSORGPU='vcgencmd measure_temp'
+
+# Alix systemboards with ic2 LM86/LM90 temp sensors
+# Insert into /etc/modules
+#  scx200_acb
+#  lm90
+
+ALIXSENSORCPU='/sys/bus/i2c/drivers/lm90/0-004c/temp2_input'
+ALIXSENSORMB='/sys/bus/i2c/drivers/lm90/0-004c/temp1_input'
  
  
 # Exit codes
@@ -29,6 +37,29 @@ STATE_CRITICAL=2
 STATE_UNKNOWN=3
  
 # Helper functions #############################################################
+
+function read_alix_temp {
+    # Sanatized reading of raw temperature from CPU Sensor
+    temp_sanatized=`cat $ALIXSENSORCPU`
+    # Celcius Temperature
+    let "temp1=$temp_sanatized/1000"
+
+    # Sanatized reading of raw temperature from MB Sensor
+    temp_sanatized=`cat $ALIXSENSORMB`
+    let "temp2=$temp_sanatized/1000"
+}
+
+function read_rpi_temp {
+    # Sanatized reading of raw temperature from CPU Sensor
+    temp_sanatized=`cat $SENSORCPU`
+    # Celcius Temperature
+    let "temp1=$temp_sanatized/1000"
+
+    # Sanatized reading of raw temperature from GPU Sensor
+    temp_sanatized=`$SENSORGPU`
+    # Remove text
+    temp2=${temp_sanatized:5:-4}
+}
  
 function print_revision {
    # Print the revision number
@@ -60,19 +91,6 @@ Options:
 __EOT
 }
 # Main #########################################################################
-
-#ToDo
-#Check if sensor exists or exit
- 
-# Sanatized reading of raw temperature from CPU Sensor
-temp_sanatized=`cat $SENSORCPU`
-# Celcius Temperature
-let "tempCPU=$temp_sanatized/1000"
-
-# Sanatized reading of raw temperature from GPU Sensor
-temp_sanatized=`$SENSORGPU`
-# Remove text
-tempGPU=${temp_sanatized:5:-4}
 
 # Warning threshold
 thresh_warn=
@@ -136,14 +154,25 @@ elif [[ "$thresh_crit" -lt "$thresh_warn" ]]; then
    exit $STATE_UNKNOWN
 fi
 
-#Outout and performance stats
-checkOutput="tempCPU=$tempCPU°C, tempGPU=$tempGPU°C | tempCPU=$tempCPU;$thresh_warn;$thresh_crit tempGPU=$tempGPU;$thresh_warn;$thresh_crit" 
+#Read tempatures
+#Check if sensor exists or exit
+if [[ -r "$SENSORCPU" ]]; then
+   read_rpi_temp
+   checkOutput="tempCPU=$temp1°C, tempGPU=$temp2°C | tempCPU=$temp1;$thresh_warn;$thresh_crit tempGPU=$temp2;$thresh_warn;$thresh_crit"
+elif [[ -r "$ALIXSENSORCPU" ]]; then
+   read_alix_temp
+   checkOutput="tempCPU=$temp1°C, tempMB=$temp2°C | tempCPU=$temp1;$thresh_warn;$thresh_crit tempMB=$temp2;$thresh_warn;$thresh_crit"
+else
+   echo "$PROGNAME: no sensors found, are kernel modules loaded?"
+   exit $STATE_UNKNOWN
+fi
 
-if [[ "$tempCPU" -gt "$thresh_crit" || "$tempGPU" -gt "$thresh_crit" ]]; then
+#Output and performance stats
+if [[ "$temp1" -gt "$thresh_crit" || "$temp2" -gt "$thresh_crit" ]]; then
    # Temperature is greater than the critical threshold
    echo "TEMP CRITICAL - $checkOutput"
    exit $STATE_CRITICAL
-elif [[ "$tempCPU" -gt "$thresh_warn" ]] || [[ "$tempGPU" -gt "$thresh_warn" ]]; then
+elif [[ "$temp1" -gt "$thresh_warn" || "$temp2" -gt "$thresh_warn" ]]; then
    # Temperature is greater than the warning threshold
    echo "TEMP WARNING - $checkOutput"
    exit $STATE_WARNING
