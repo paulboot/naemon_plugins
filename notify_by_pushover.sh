@@ -1,5 +1,11 @@
 #!/bin/bash
 
+#ToDo
+#Check exit code from URL
+#Check result URL
+#Test if log file exists
+
+
 #	Notify by Pushover
 #	by Jedda Wignall
 #	http://jedda.me
@@ -71,6 +77,7 @@
 #  _pushover_device               device-name
 #}
 
+logfile="/var/log/naemon/notify_by_pushover"
 
 # Proxy support
 #export http_proxy=http://proxydlf.gg.nl:8080/
@@ -105,7 +112,7 @@ elif echo $title $message | grep -q 'OK' && [ "$okSound" != "" ] ;then
 	sound=$okSound
 fi
 
-#echo "/usr/bin/curl -s -F \"token=$appToken\" -F \"user=$userKey\" -F \"title=$title\" -F \"message=$message\" -F \"sound=$sound\" -F \"$priorityString\" https://api.pushover.net/1/messages" >> /tmp/pushover.txt
+#echo "/usr/bin/curl -s -F \"token=$appToken\" -F \"user=$userKey\" -F \"title=$title\" -F \"message=$message\" -F \"sound=$sound\" -F \"$priorityString\" https://api.pushover.net/1/messages" >> $logfile
 
 /usr/bin/curl -s -F "token=$appToken" \
 -F "user=$userKey" \
@@ -114,8 +121,8 @@ fi
 -F "sound=$sound" \
 -F "$priorityString" \
 -F "html=1" \
-https://api.pushover.net/1/messages >> /tmp/pushover.txt 2>&1
+https://api.pushover.net/1/messages >> $logfile 2>&1
 
-echo >> /tmp/pushover.txt
+echo >> $logfile
 
 exit 0
