@@ -1,5 +1,14 @@
 #!/usr/bin/python
 
+#check commands
+#check_command  check_dns!www.example.nl!cname=www1.example.nl
+#check_command  check_dns!www1.example.nl!a=192.168.1.1
+
+#define command {
+#  command_name                   check_dns
+#  command_line                   $USER1$/check_dns.py $ARG1$ $ARG2$
+#}
+
 import optparse
 import os
 import dns
