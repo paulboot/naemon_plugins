@@ -5,6 +5,16 @@
 # Nagios plugin to report time difference as received via SNMP compared to the local time.
 # Make sure the machine this script runs on (poller/nagios host) is using NTP.
 
+# Sample config:
+
+#check_command                    check_snmp_time_command!10!30
+
+#define command {
+#  command_name                   check_snmp_time_command
+#  command_line                   /usr/local/lib/nagios/plugins/check_snmp_time -w $ARG1$ -c $ARG2$ -H $HOSTADDRESS$
+#}
+
+
 usage() {
 # This function is called when a user enters impossible values.
 echo "Usage: $0 -H HOSTADDRESS [-C COMMUNITY] [-w WARNING] [-c CRITICAL] [-v VERSION]"
