@@ -1,0 +1,71 @@
+            <table class="table table-bordered table-mod-2">
+            <thead>
+              <tr>
+                <th>Hostnaam</th>
+                <th>IPnummer</th>
+                <th>Min.</th>
+                <th>Mediaan</th>
+                <th>Max.</th>
+                <th>Metingen</th>
+              </tr>
+            </thead>
+            <tbody>
+             {%- for host in status|sort %}
+              <tr>
+                <td {% if status[host]['errorlevel'] == 0 -%}
+                    class="t_b_green">
+                    {%- elif status[host]['errorlevel'] == 1 -%}
+                    class="t_b_orange">
+                    {%- else -%}
+                    class="t_b_red">
+                    {%- endif -%}
+                    {{host}}</td>
+                <td>{{status[host]['ip']}}</td>
+                <td>
+                    {%- if status[host]['min'] -%}
+                        {%- if status[host]['min'] > status[host]['limit_rtt_time'] -%}
+                        <span class="s_orange">{{"%.2f"|format(status[host]['min'])}}</span> 
+                        {%- else -%}
+                        <span class="s_green">{{"%.2f"|format(status[host]['min'])}}</span> 
+                        {%- endif -%}
+                    {%- else -%}
+                    <span class="s_red">-.-</span>
+                    {%- endif -%}
+                </td>
+                <td>
+                    {%- if status[host]['median'] -%}
+                        {%- if status[host]['median'] > status[host]['limit_rtt_time'] -%}
+                        <span class="s_orange">{{"%.2f"|format(status[host]['median'])}}</span> 
+                        {%- else -%}
+                        <span class="s_green">{{"%.2f"|format(status[host]['median'])}}</span> 
+                        {%- endif -%}
+                    {%- else -%}
+                    <span class="s_red">-.-</span>
+                    {%- endif -%}
+                </td>
+                <td>
+                    {%- if status[host]['max'] -%}
+                        {%- if status[host]['max'] > status[host]['limit_rtt_time'] -%}
+                        <span class="s_orange">{{"%.2f"|format(status[host]['max'])}}</span> 
+                        {%- else -%}
+                        <span class="s_green">{{"%.2f"|format(status[host]['max'])}}</span> 
+                        {%- endif -%}
+                    {%- else -%}
+                    <span class="s_red">-.-</span>
+                    {%- endif -%}
+                </td>
+                <td>
+                {%- for value in status[host]['responses'] -%}
+                    {%- if value == '-' -%}
+                    <span class="s_red">-.-</span> 
+                    {% elif value > status[host]['limit_rtt_time'] -%}
+                    <span class="s_orange">{{"%.2f"|format(value)}}</span> 
+                    {% else -%}
+                    <span class="s_green">{{"%.2f"|format(value)}}</span> 
+                    {% endif -%}
+                {%- endfor -%}
+                </td>
+              </tr>
+             {%- endfor %}
+            </tbody>
+          </table>  
