@@ -319,13 +319,13 @@ print "CRITICAL" if ($exit_val eq $ERRORS{"CRITICAL"});
 print ": ";
 
 if ( $offset == 0 ) {
-  print "clock is accurate to the second";
+  print "Clock is accurate to the second";
 } else {
   if ( abs($offset) != $offset ) {
-     print "clock is ".abs($offset)." seconds late";
+     print "Clock is ".abs($offset)." seconds late";
   }
   if ( abs($offset) == $offset ) {
-    print "clock is $offset seconds early";
+    print "Clock is $offset seconds early";
   }
 }
 
