@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w 
 ############################## check_snmp_load #################
-my $Version='1.3.3';
+my $Version='1.4';
 # Date : Oct 12 2007
 # Author  : Patrick Proy ( patrick at proy.org)
 # Help : http://nagios.manubulon.com/
@@ -12,7 +12,9 @@ my $Version='1.3.3';
 # Added support for Cisco ASA 5500 
 # Date : Nov 13 2012
 # Changed Perfdata to allow better use of data.
-#
+##########################
+# Contributor: Paul Boot
+# Changed Perfdata to comply with Nagios3/Naemon standard
 # Help : ./check_snmp_load.pl -h
 #
 
@@ -117,7 +119,6 @@ my @o_warnL=	undef;		# warning levels for Linux Load or Cisco CPU
 my $o_crit=	undef;		# critical level
 my @o_critL=	undef;		# critical level for Linux Load or Cisco CPU
 my $o_timeout=  undef; 		# Timeout (Default 5)
-my $o_perf=     undef;          # Output performance data
 my $o_version2= undef;          # use snmp v2c
 # SNMPv3 specific
 my $o_login=	undef;		# Login for snmpv3
@@ -132,7 +133,7 @@ my $o_privpass= undef;		# priv password
 sub p_version { print "check_snmp_load version : $Version\n"; }
 
 sub print_usage {
-    print "Usage: $0 [-v] -H <host> -C <snmp_community> [-2] | (-l login -x passwd [-X pass -L <authp>,<privp>])  [-p <port>] -w <warn level> -c <crit level> -T=[stand|netsl|netsc|as400|cisco|cata|c5500|nsc|fg|bc|nokia|hp|lp|hpux] [-f] [-t <timeout>] [-V]\n";
+    print "Usage: $0 [-v] -H <host> -C <snmp_community> [-2] | (-l login -x passwd [-X pass -L <authp>,<privp>])  [-p <port>] -w <warn level> -c <crit level> -T=[stand|netsl|netsc|as400|cisco|cata|c5500|nsc|fg|bc|nokia|hp|lp|hpux] [-t <timeout>] [-V]\n";
 }
 
 sub isnnum { # Return true if arg is not a number
@@ -190,8 +191,6 @@ sub help {
 		hp    : HP procurve switch CPU usage
 		lp    : Linkproof CPU usage
 		hpux  : HP-UX load (1,5 & 15 minutes values)
--f, --perfparse
-   Perfparse compatible output
 -t, --timeout=INTEGER
    timeout for SNMP in seconds (Default: 5)
 -V, --version
@@ -219,7 +218,6 @@ sub check_options {
 	'2'     => \$o_version2,        'v2c'           => \$o_version2,
         'c:s'   => \$o_crit,            'critical:s'    => \$o_crit,
         'w:s'   => \$o_warn,            'warn:s'        => \$o_warn,
-        'f'     => \$o_perf,            'perfparse'     => \$o_perf,
 	'T:s'	=> \$o_check_type,	'type:s'	=> \$o_check_type
 	);
     # check the -T option
@@ -408,13 +406,11 @@ for (my $i=0;$i<3;$i++) {
   }
 }
 print " OK" if ($exit_val eq $ERRORS{"OK"});
-if (defined($o_perf)) { 
-   print " | load_5_sec=$load[0], warn5s=$o_warnL[0], crit5s=$o_critL[0], ";
-   print "load_1_min=$load[1], warn1m=$o_warnL[1], crit1m=$o_critL[1], ";
-   print "load_5_min=$load[2], warn5m=$o_warnL[2], crit5m=$o_critL[2]\n";
-} else {
- print "\n";
-}
+print " | load_5_sec=$load[0];$o_warnL[0];$o_critL[0];0; ";
+print "load_1_min=$load[1];$o_warnL[1];$o_critL[1];0; ";
+print "load_5_min=$load[2];$o_warnL[2];$o_critL[2];0;";
+print "\n";
+
 exit $exit_val;
 }
 
@@ -462,13 +458,10 @@ for (my $i=0;$i<3;$i++) {
   }
 }
 print " OK" if ($exit_val eq $ERRORS{"OK"});
-if (defined($o_perf)) {
-   print " | load_5_sec=$load[0], warn5s=$o_warnL[0], crit5s=$o_critL[0], ";
-   print "load_1_min=$load[1], warn1m=$o_warnL[1], crit1m=$o_critL[1], ";
-   print "load_5_min=$load[2], warn5m=$o_warnL[2], crit5m=$o_critL[2]\n";
-} else {
- print "\n";
-}
+print " | load_5_sec=$load[0];$o_warnL[0];$o_critL[0];0; ";
+print "load_1_min=$load[1];$o_warnL[1];$o_critL[1];0; ";
+print "load_5_min=$load[2];$o_warnL[2];$o_critL[2];0;";
+print "\n";
 
 exit $exit_val;
 }
@@ -517,13 +510,10 @@ for (my $i=0;$i<3;$i++) {
   }
 }
 print " OK" if ($exit_val eq $ERRORS{"OK"});
-if (defined($o_perf)) {
-   print " | load_5_sec=$load[0], warn5s=$o_warnL[0], crit5s=$o_critL[0], ";
-   print "load_1_min=$load[1], warn1m=$o_warnL[1], crit1m=$o_critL[1], ";
-   print "load_5_min=$load[2], warn5m=$o_warnL[2], crit5m=$o_critL[2]\n";
-} else {
- print "\n";
-}
+print " | load_5_sec=$load[0];$o_warnL[0];$o_critL[0];0; ";
+print "load_1_min=$load[1];$o_warnL[1];$o_critL[1];0; ";
+print "load_5_min=$load[2];$o_warnL[2];$o_critL[2];0;";
+print "\n";
 
 exit $exit_val;
 }
@@ -572,13 +562,10 @@ for (my $i=0;$i<3;$i++) {
   }
 }
 print " OK" if ($exit_val eq $ERRORS{"OK"});
-if (defined($o_perf)) {
-   print " | load_5_sec=$load[0], warn5s=$o_warnL[0], crit5s=$o_critL[0], ";
-   print "load_1_min=$load[1], warn1m=$o_warnL[1], crit1m=$o_critL[1], ";
-   print "load_5_min=$load[2], warn5m=$o_warnL[2], crit5m=$o_critL[2]\n";
-} else {
- print "\n";
-}
+print " | load_5_sec=$load[0];$o_warnL[0];$o_critL[0];0; ";
+print "load_1_min=$load[1];$o_warnL[1];$o_critL[1];0; ";
+print "load_5_min=$load[2];$o_warnL[2];$o_critL[2];0;";
+print "\n";
 
 exit $exit_val;
 }
@@ -627,13 +614,10 @@ for (my $i=0;$i<3;$i++) {
   }
 }
 print " OK" if ($exit_val eq $ERRORS{"OK"});
-if (defined($o_perf)) {
-   print " | load_5_sec=$load[0], warn5s=$o_warnL[0], crit5s=$o_critL[0], ";
-   print "load_1_min=$load[1], warn1m=$o_warnL[1], crit1m=$o_critL[1], ";
-   print "load_5_min=$load[2], warn5m=$o_warnL[2], crit5m=$o_critL[2]\n";
-} else {
- print "\n";
-}
+print " | load_5_sec=$load[0];$o_warnL[0];$o_critL[0];0; ";
+print "load_1_min=$load[1];$o_warnL[1];$o_critL[1];0; ";
+print "load_5_min=$load[2];$o_warnL[2];$o_critL[2];0;";
+print "\n";
 
 exit $exit_val;
 }
@@ -679,9 +663,7 @@ if ($load > $o_crit) {
   }
 }
 print "<$o_warn) : OK" if ($exit_val eq $ERRORS{"OK"});
-(defined($o_perf)) ?
-   print " | cpu_prct_used=$load, warn=$o_warn, crit=$o_crit\n"
- : print "\n";
+print " | cpu_used=$load%;$o_warn;$o_crit;;\n";
 exit $exit_val;
 
 }
@@ -732,13 +714,10 @@ for (my $i=0;$i<3;$i++) {
   }
 }
 print " OK" if ($exit_val eq $ERRORS{"OK"});
-if (defined($o_perf)) {
-   print " | load_5_sec=$load[0], warn5s=$o_warnL[0], crit5s=$o_critL[0], ";
-   print "load_1_min=$load[1], warn1m=$o_warnL[1], crit1m=$o_critL[1], ";
-   print "load_5_min=$load[2], warn5m=$o_warnL[2], crit5m=$o_critL[2]\n";
-} else {
- print "\n";
-}
+print " | load_5_sec=$load[0];$o_warnL[0];$o_critL[0];0; ";
+print "load_1_min=$load[1];$o_warnL[1];$o_critL[1];0; ";
+print "load_5_min=$load[2];$o_warnL[2];$o_critL[2];0;";
+print "\n";
 
 exit $exit_val;
 }
@@ -787,9 +766,7 @@ if ($cpu_used > $o_crit) {
   }
 }
 print " < $o_warn% : OK" if ($exit_val eq $ERRORS{"OK"});
-(defined($o_perf)) ?
-   print " | cpu_prct_used=$cpu_used, warn=$o_warn, crit=$o_crit\n"
- : print "\n";
+print " | cpu_used=$cpu_used%;$o_warn;$o_crit;;\n";
 exit $exit_val;
 
 
