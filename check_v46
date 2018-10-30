@@ -28,7 +28,7 @@
 use strict;
 use warnings FATAL => qw(all);
 use File::Basename;
-use Getopt::Long;
+use Getopt::Long qw(:config no_ignore_case);;
 use Socket;     # AF_INET, AF_INET6
 use Socket6;    # getaddrinfo(), getnameinfo()
 
@@ -54,8 +54,8 @@ GetOptions( \%opts,
     "IP-address|I=s",	# support 'check_http -I'
     "use-ipv4|4",
     "use-ipv6|6",
-    "ipv4-address|a=s",
-    "ipv6-address|A=s",
+    "ipv4-address=s",
+    "ipv6-address=s",
     ) or die "Problems parsing command line: $!\n";
 
 if ( $opts{help} ) {
@@ -67,6 +67,7 @@ if ( $opts{help} ) {
 if (!scalar @ARGV) {
     die("Nothing to do. Try '".basename($0)." -h'.\n");
 }
+#ToDo needs rewrite fail if -I and IP addresses are supplied
 if (!defined($opts{hostname}) && !defined($opts{'IP-address'}) &&
     !(defined($opts{'ipv4-address'}) ||
     defined($opts{'ipv6-address'}))) {
@@ -77,6 +78,7 @@ if ( $opts{'use-ipv4'} && $opts{'use-ipv6'} ) {
 }
 
 my $plugin_prog = shift(@ARGV);
+## ToDo needs sanity check and die if not OK
 
 # Do both IPv4 and IPv6 checks by default, skipping
 # IPv6 in case -4 was specified skipping IPv4 in case
@@ -104,38 +106,37 @@ foreach my $p (@protocols) {
 
     # Resolve.
     my @addresses = ();
-    my $addr_optname = '--hostname';
-    my $optname;
+    my $addr_optname;
+    my $ipv46_optname;
     my $af;
     if ( $p eq 'IPv6' ) {
-        $optname = 'ipv6-address';
-        $af      = AF_INET6;
+        $ipv46_optname = 'ipv6-address';
+        $af = AF_INET6;
     }
     elsif ( $p eq 'IPv4' ) {
-        $optname = 'ipv4-address';
-        $af      = AF_INET;
+        $ipv46_optname = 'ipv4-address';
+        $af = AF_INET;
     }
     else {
         die "Protocol '$p' is not supported.\n";
     }
 
-    if ( defined($opts{$optname}) ) {
-
+    if ( defined($opts{$ipv46_optname}) ) {
         # --ipvX-address was specified on command line.
-        push @addresses, split( ',', $opts{$optname} );
+        push @addresses, split( ',', $opts{$ipv46_optname} );
+        $addr_optname = '--IP-address';
     }
     elsif ( defined($opts{'IP-address'}) && resolve_address( $opts{'IP-address'} , $af ) ) {
-	# $opts{'IP-address'} has an $af address.  Pass it to plugin.
-	@addresses = ( $opts{'IP-address'} );
-	$addr_optname = '--IP-address';
+        # $opts{'IP-address'} has an $af address.  Pass it to plugin.
+        @addresses = ( $opts{'IP-address'} );
+        $addr_optname = '--IP-address';
     }
     elsif ( resolve_address( $opts{hostname}, $af ) ) {
-
         # $opts{hostname} has an $af address.  Pass it to plugin.
         @addresses = ( $opts{hostname} );
+        $addr_optname = '--hostname';
     }
     else {
-
         # Neither $opts{'IP-address'} nor $opts{hostname} resolve for $af.
         next;
     }
@@ -145,9 +146,13 @@ foreach my $p (@protocols) {
     # Insert -6 or -4 as first arg for plugin command.
     unshift(@plugin_args, ( $p eq "IPv6" ) ? "-6" : "-4");
 
-    # Pass through --hostname option as-is if --IP-address was also specified.
     if (defined($opts{'IP-address'}) && defined($opts{hostname})) {
-	push(@plugin_args, '--hostname', $opts{hostname});
+        # Pass through --hostname option as-is if --IP-address was also specified.
+        push(@plugin_args, '--hostname', $opts{hostname});
+    }
+    elsif (defined($opts{$ipv46_optname}) && defined($opts{hostname})) {
+        # Pass through --hostname option as-is if --IPv4-address or --IPv6-address was also specified.
+        push(@plugin_args, '--hostname', $opts{hostname});
     }
 
     my $an = 1;
@@ -171,7 +176,6 @@ foreach my $p (@protocols) {
         # Add lc($p) as prefix to performance data labels, e.g.
         # 'loss' becomes 'ipv6_loss' etc.
         my $perfdata = $2;
-        debug( "Unformatted performance data: '" . $perfdata . "'" );
         if ( defined($perfdata) ) {
             my $label_prefix = lc($p);
             $label_prefix .= "_a" . $an if ( @addresses );
@@ -258,6 +262,7 @@ sub resolve_address {
 
 sub usage {
     my $ME = basename($0);
+#ToDo update de depricate options and add http and check_ssh examples
     print <<"AMEN";
 Usage: $ME -H <host> [--use-ipv4|--use-ipv6] [<other options>] \
   <plugin> [<other plugin args>]
