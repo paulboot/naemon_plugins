@@ -1,5 +1,9 @@
 #!/bin/bash
 
+# Writen by Craig Dienger see: https://www.nagios.com/news/2018/01/monitoring-cryptocurrency-nagios/
+# Minor tweaks by Paul Boot
+
+
 #Convert crypto values
 
 # $1 FROM (example: BTC)
@@ -31,18 +35,18 @@ critical=$?
 
 if [ $critical -eq 0 ]
 then
-	echo "CRITICAL $1 @ $result $2|$1_$2=$result"
+	echo "CRITICAL $1 @ $result $2|$1_$2=$result;$3;$4;0"
 	exit 2 
 fi
 
 if [ $warning -eq 1 ]
 then
-	echo "OK $1 @ $result $2|$1_$2=$result"
+	echo "OK $1 @ $result $2|$1_$2=$result;$3;$4;0"
 	exit 0
 fi
 
 if [ $warning -eq 0 ] 
 then
-	echo "WARNING $1 @ $result $2|$1_$2=$result"
+	echo "WARNING $1 @ $result $2|$1_$2=$result;$3;$4;0"
 	exit 1 
 fi
