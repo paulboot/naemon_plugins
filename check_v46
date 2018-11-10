@@ -7,10 +7,12 @@
 # IPv6 and/or IPv4.  The worst result of the actual plugin runs will be
 # the wrapper return value, that is, result will be OK only if all checks
 # returned OK.  Compatible with any plugin with standard command line options
-# -6/-4.
+# -6/-4/-H (--hostname) and with check_http -I -H options
 #
 # 2012-02, 2012-03 Ville.Mattila@csc.fi
 # Copyright (C) 2012-2013 CSC - IT Center for Science Ltd.
+# 2018-10 paulboot@gmail.com
+# Update to solve incompatibility issues with check_http -a option
 #
 # This program is free software; you can redistribute it and/or modify it under
 # the terms of the GNU General Public License as published by the Free Software
@@ -28,7 +30,7 @@
 use strict;
 use warnings FATAL => qw(all);
 use File::Basename;
-use Getopt::Long qw(:config no_ignore_case);;
+use Getopt::Long;
 use Socket;     # AF_INET, AF_INET6
 use Socket6;    # getaddrinfo(), getnameinfo()
 
@@ -51,7 +53,7 @@ GetOptions( \%opts,
     "debug-wrapper",
     "help|h",
     "hostname|H=s",
-    "IP-address|I=s",	# support 'check_http -I'
+    "IP-address|I:s",	# support for 'check_http -I'
     "use-ipv4|4",
     "use-ipv6|6",
     "ipv4-address=s",
@@ -67,18 +69,26 @@ if ( $opts{help} ) {
 if (!scalar @ARGV) {
     die("Nothing to do. Try '".basename($0)." -h'.\n");
 }
-#ToDo needs rewrite fail if -I and IP addresses are supplied
+
 if (!defined($opts{hostname}) && !defined($opts{'IP-address'}) &&
-    !(defined($opts{'ipv4-address'}) ||
-    defined($opts{'ipv6-address'}))) {
-    die("No host/address specified. Try '".basename($0)." -h'.\n");
+    !(defined($opts{'ipv4-address'}) || defined($opts{'ipv6-address'}))) {
+        die("No host/address specified. Try '".basename($0)." -h'.\n");
+}
+# Warn if both --IP-address and ip4-address and/or ip6-address are found
+if (defined($opts{'IP-address'}) && 
+   (defined($opts{'ipv4-address'}) || defined($opts{'ipv6-address'}))) {
+        if ($opts{'IP-address'} ne '') {
+            warn("Values for --IP-address are ignored and replaced by --ipv4-address and/or ipv6-address.\n")
+        }
 }
 if ( $opts{'use-ipv4'} && $opts{'use-ipv6'} ) {
     die("Please specify either or none of --use-ipv4 or --use-ipv6, not both.\n");
 }
 
 my $plugin_prog = shift(@ARGV);
-## ToDo needs sanity check and die if not OK
+if ( ! -X $plugin_prog ) {
+    die("Can not find executable plugin '$plugin_prog' or wrong arguments for '".basename($0)."'.\n");
+}
 
 # Do both IPv4 and IPv6 checks by default, skipping
 # IPv6 in case -4 was specified skipping IPv4 in case
@@ -121,39 +131,62 @@ foreach my $p (@protocols) {
         die "Protocol '$p' is not supported.\n";
     }
 
+    my @plugin_args = @ARGV;
+        
     if ( defined($opts{$ipv46_optname}) ) {
         # --ipvX-address was specified on command line.
+        # Ignore the IP-address value
+        # Display warning or die???        
         push @addresses, split( ',', $opts{$ipv46_optname} );
-        $addr_optname = '--IP-address';
-    }
-    elsif ( defined($opts{'IP-address'}) && resolve_address( $opts{'IP-address'} , $af ) ) {
-        # $opts{'IP-address'} has an $af address.  Pass it to plugin.
-        @addresses = ( $opts{'IP-address'} );
-        $addr_optname = '--IP-address';
-    }
-    elsif ( resolve_address( $opts{hostname}, $af ) ) {
-        # $opts{hostname} has an $af address.  Pass it to plugin.
-        @addresses = ( $opts{hostname} );
-        $addr_optname = '--hostname';
+        
+        if (defined($opts{'IP-address'}) && defined($opts{hostname})) {
+            # For check_http support pass through --hostname option as-is if --IP-address was also specified.
+            push(@plugin_args, '--hostname', $opts{hostname});
+            $addr_optname = '--IP-address';
+        }
+        elsif (defined($opts{'IP-address'}) && !defined($opts{hostname})) {
+            $addr_optname = '--IP-address';
+        }
+        elsif (!defined($opts{'IP-address'}) && defined($opts{hostname})) {
+            $addr_optname = '--hostname';
+        }
+        else {
+            $addr_optname = '--hostname';
+        }
     }
     else {
-        # Neither $opts{'IP-address'} nor $opts{hostname} resolve for $af.
-        next;
+        # --ipvX-address was NOT specified on command line.
+        if (defined($opts{'IP-address'}) && defined($opts{hostname})) {
+            # For check_http support pass through --hostname option as-is if --IP-address was also specified.
+            push(@plugin_args, '--hostname', $opts{hostname});
+            $addr_optname = '--IP-address';
+            if (resolve_address( $opts{'IP-address'} , $af ) ) {
+                # $opts{'IP-address'} has an $af address.  Pass it to plugin.
+                @addresses = ( $opts{'IP-address'} );
+            }
+        }
+        elsif (defined($opts{'IP-address'}) && !defined($opts{hostname})) {
+            $addr_optname = '--IP-address';
+            if (resolve_address( $opts{'IP-address'} , $af ) ) {
+                # $opts{'IP-address'} has an $af address.  Pass it to plugin.
+                @addresses = ( $opts{'IP-address'} );
+            }
+        }
+        elsif (!defined($opts{'IP-address'}) && defined($opts{hostname})) {
+            $addr_optname = '--hostname';
+            if ( resolve_address( $opts{hostname}, $af ) ) {
+                # $opts{hostname} has an $af address.  Pass it to plugin.
+                @addresses = ( $opts{hostname} );
+                $addr_optname = '--hostname';
+            }
+        }
+        else {
+            die("Option --ipv4-address and/or --ipv6-address are NOT defined, add --IP-address and/or --hostname");
+        }     
     }
-
-    my @plugin_args = @ARGV;
 
     # Insert -6 or -4 as first arg for plugin command.
     unshift(@plugin_args, ( $p eq "IPv6" ) ? "-6" : "-4");
-
-    if (defined($opts{'IP-address'}) && defined($opts{hostname})) {
-        # Pass through --hostname option as-is if --IP-address was also specified.
-        push(@plugin_args, '--hostname', $opts{hostname});
-    }
-    elsif (defined($opts{$ipv46_optname}) && defined($opts{hostname})) {
-        # Pass through --hostname option as-is if --IPv4-address or --IPv6-address was also specified.
-        push(@plugin_args, '--hostname', $opts{hostname});
-    }
 
     my $an = 1;
     foreach my $a (@addresses) {
@@ -277,23 +310,30 @@ Options:
 	Check IPv4 only.
   -6, --use-ipv6
 	Check IPv6 only.
-  -a, --ipv4-address=a.b.c.d,e.f.g.h
+  --ipv4-address=a.b.c.d,e.f.g.h
   	Check IPv4 using addresses a.b.c.d and e.f.g.h;
 	plugin will be run with the address as --hostname 
 	option argument (replacing the original argument of
-	--hostname).
-  -A, --ipv6-address=A::B,C::D
-	Check IPv6 using addresses A::B and C::D; see -a above
-	for notes on plugin --hostname option handling.
+	--hostname). The -a argument is deprecated because of
+    incompatibility with -a arguments used in the <other plugin args>.
+  --ipv6-address=A::B,C::D
+	Check IPv6 using addresses A::B and C::D; see --ipv4-address above
+	for notes on plugin --hostname option handling. The -A 
+    argument is deprecated because of incompatibility issues
+    with -A arguments used in the <other plugin args>.
   <plugin>
 	Path to the actual plugin program to run.
   <other plugin args>
-	Any command line arguments besides -H, -4, -6, -a and -A
-	will be passed as-is to the <plugin>.
+	Any command line arguments besides -H, -4, -6, --ipv4-address and
+    --ipv6-address will be passed as-is to the <plugin>.
 
   The order of options is not relevant, e.g.
   '$ME -H <host> <plugin>' is effectively the same as
   '$ME <plugin> -H <host>'.
+  
+  If the option --ipv4-address and/or --ipv6-address is used then
+  the value of -H <host> or -I <host|address> is ignored respectively
+  for IPv4 and/or IPv6 and no DNS resolving is done.
 
 Examples:
   $ME check_ssh -H host.example.org
@@ -301,18 +341,25 @@ Examples:
     the system resolver returns an IPv6 address and likewise for 
     IPv4.
   $ME check_ssh -H host.example.org -4
-  - Run IPv4 check only.
+  - Resolve host.example.org and run IPv4 check only.
   $ME check_ssh -H host.example.org -6
-  - Run IPv6 check only.
-  $ME check_ssh -H host.example.org -a a.b.c.d
+  - Resolve host.example.org and run IPv6 check only.
+  $ME check_ssh --ipv4-address a.b.c.d --ipv6-address A::B
+  - Pass "--hostname a.b.c.d" to check_ssh when checking IPv4
+    and pass "--hostname A::B" to checking IPv6.
+  $ME check_ssh -H host.example.org --ipv4-address a.b.c.d
   - Pass "--hostname a.b.c.d" to check_ssh when checking IPv4
     and have IPv6 checks run automatically as in the first example.
-  $ME check_ssh -H host.example.org -6 -A A::B
+  $ME check_ssh -H host.example.org -6 --ipv6-address A::B
   - IPv6 checking only, skip resolving host.example.org and
     just pass "--hostname A::B" to check_ssh.
-  $ME check_http -I vhost.example.org -H lb-01.example.org
-  - Check the HTTP virtual host vhost.example at load balancer node
-    lb-01.
+  $ME check_http -I lb-01.example.org -H vhost.example.org
+  - Check the HTTP virtual host vhost.example.org at the load balancer
+  node lb-01.example.org.
+  $ME check_http --ipv4-address a.b.c.d --ipv6-address A::B -I -H vhost.example.org
+  - Check the HTTP virtual host vhost.example.org at the IPv4 address a.b.c.d 
+  and A::B. Here the -I option MUST be set with no value to indicate 
+  check_http -I is to be used!
 AMEN
 }
 
