@@ -27,8 +27,8 @@ source /usr/lib/nagios/plugins/utils.sh
 YES=0
 NO=1
 ERR=2
-PROGNAME=`basename $0`
-PROGPATH=`echo $0 | sed -e 's,[\\/][^\\/][^\\/]*$,,'`
+PROGNAME=$(basename $0)
+PROGPATH=$(echo $0 | sed -e 's,[\\/][^\\/][^\\/]*$,,')
 REVISION="1.1"
 
 # Make sure the correct number of command line arguments
@@ -37,7 +37,7 @@ if [ $# -lt 4 ]; then
     exit $STATE_UNKNOWN
 fi
 
-RESULT=`/usr/bin/curl -X GET "https://min-api.cryptocompare.com/data/price?fsym=$1&tsyms=$2" -m 30 -s | awk -F '[:}]' '{print $2}'` 
+RESULT=$(/usr/bin/curl -X GET "https://min-api.cryptocompare.com/data/price?fsym=$1&tsyms=$2" -m 30 -s | awk -F '[:}]' '{print $2}')
 
 check_range $RESULT $3
 WARNING=$?
