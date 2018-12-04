@@ -36,16 +36,18 @@ REVISION="1.2"
 
 if [ ! -z "$5" ]
 then
-    SERVICEPERFDATA=$5  #"BTC_USD=3880.64;~:12000;~:15000;0 ARMED=0"
+    SERVICEPERFDATA=$5  #"BTC_USD=3880.64;~:12000;~:15000;0 WARNING_ARMED=0 CRITICAL_ARMED=0"
     #cut on space then cut on =
-    ARMED=$(cut -d'=' -f2 <<< $(cut -d' ' -f2 <<< $5))
-    if [ -z "$ARMED" ]
+    WARNING_ARMED=$(cut -d'=' -f2 <<< $(cut -d' ' -f2 <<< $5))
+    CRITICAL_ARMED=$(cut -d'=' -f2 <<< $(cut -d' ' -f3 <<< $5))
+    if [[ -z "$WARNING_ARMED" || -z "$CRITICAL_ARMED" ]]
     then
         echo "UNKNOWN $! invalid previous perf data"
         exit $STATE_UNKNOWN     
     fi
 else
-    ARMED=$TRUE
+    WARNING_ARMED=$TRUE
+    CRITICAL_ARMED=$TRUE
 fi
 
 # Make sure the correct number of command line arguments
@@ -57,85 +59,68 @@ fi
 
 RESULT=$(/usr/bin/curl -X GET "https://min-api.cryptocompare.com/data/price?fsym=$1&tsyms=$2" -m 30 -s | awk -F '[:}]' '{print $2}')
 
-if [ $ARMED -eq $TRUE ]
+if [ $WARNING_ARMED -eq $TRUE ]
 then
     check_range $RESULT $3
     WARNING=$?
-    check_range $RESULT $4
-    CRITICAL=$?
-
-    if [ $WARNING -eq $NO ]
-    then
-        ARMED=$TRUE
-        echo "OK $1 @ $RESULT $2|$1_$2=$RESULT;$3;$4;0 ARMED=$ARMED"
-        exit $STATE_OK
-    fi
-
-    if [[ $WARNING -eq $YES && $CRITICAL -eq $NO ]] 
-    then
-        ARMED=$FALSE
-        echo "WARNING $1 @ $RESULT $2|$1_$2=$RESULT;$3;$4;0 ARMED=$ARMED"
-        exit $STATE_WARNING
-    fi
-
-    if [ $CRITICAL -eq $YES ]
-    then
-        ARMED=$FALSE
-        echo "CRITICAL $1 @ $RESULT $2|$1_$2=$RESULT;$3;$4;0 ARMED=$ARMED"
-        exit $STATE_CRITICAL
-    fi
-
-    if [[ $WARNING -eq $ERR || $CRITICAL -eq $ERR ]]
-    then
-        ARMED=$TRUE
-        echo "UNKNOWN $! invalid range"
-        exit $STATE_UNKNOWN
-    fi
 else
-    #Going into unarmed mode modify the WARNING and CRITICAL levels by 1%
-    #BTC USD 11000:12000 10000:15000 $SERVICEPERFDATA$"
-    #TRX BTC 0.000003:0.000004 0.000001:0.000006 $SERVICEPERFDATA$"
     WARNING_LOW=$(cut -d':' -f1 <<< $3)
     WARNING_HIGH=$(cut -d':' -f2 <<< $3)
-    CRITICAL_LOW=$(cut -d':' -f1 <<< $4)
-    CRITICAL_HIGH=$(cut -d':' -f2 <<< $4)
-    
+
     WARNING_LOW=$(bc <<< "scale=8; $WARNING_LOW + $WARNING_LOW/100")
     WARNING_HIGH=$(bc <<< "scale=8; $WARNING_HIGH - $WARNING_HIGH/100")
+    
+    #echo $RESULT "$WARNING_LOW:$WARNING_HIGH"
+    check_range $RESULT "$WARNING_LOW:$WARNING_HIGH"
+    WARNING=$?    
+fi
+
+if [ $CRITICAL_ARMED -eq $TRUE ]
+then
+    check_range $RESULT $4
+    CRITICAL=$?
+else
+    CRITICAL_LOW=$(cut -d':' -f1 <<< $4)
+    CRITICAL_HIGH=$(cut -d':' -f2 <<< $4)
+
     CRITICAL_LOW=$(bc <<< "scale=8; $CRITICAL_LOW + $CRITICAL_LOW/100")
     CRITICAL_HIGH=$(bc <<< "scale=8; $CRITICAL_HIGH - $CRITICAL_HIGH/100")
     
-    check_range $RESULT "$WARNING_LOW:$WARNING_HIGH"
-    WARNING=$?
+    #echo $RESULT "$CRITICAL_LOW:$CRITICAL_HIGH"
     check_range $RESULT "$CRITICAL_LOW:$CRITICAL_HIGH"
-    CRITICAL=$?
-    
-    if [ $WARNING -eq $NO ]
-    then
-        ARMED=$TRUE
-        echo "OK $1 @ $RESULT $2|$1_$2=$RESULT;$3;$4;0 ARMED=$ARMED"
-        exit $STATE_OK
-    fi
-
-    if [[ $WARNING -eq $YES && $CRITICAL -eq $NO ]] 
-    then
-        ARMED=$FALSE
-        echo "WARNING $1 @ $RESULT $2|$1_$2=$RESULT;$3;$4;0 ARMED=$ARMED"
-        exit $STATE_WARNING
-    fi
-
-    if [ $CRITICAL -eq $YES ]
-    then
-        ARMED=$FALSE
-        echo "CRITICAL $1 @ $RESULT $2|$1_$2=$RESULT;$3;$4;0 ARMED=$ARMED"
-        exit $STATE_CRITICAL
-    fi
-
-    if [[ $WARNING -eq $ERR || $CRITICAL -eq $ERR ]]
-    then
-        ARMED=$TRUE
-        echo "UNKNOWN $! @ invalid range"
-        exit $STATE_UNKNOWN
-    fi  
+    CRITICAL=$?    
 fi
+
+if [ $WARNING -eq $NO ]
+then
+    WARNING_ARMED=$TRUE
+    CRITICAL_ARMED=$TRUE
+    echo "OK $1 @ $RESULT $2|$1_$2=$RESULT;$3;$4;0 WARNING_ARMED=$WARNING_ARMED CRITICAL_ARMED=$CRITICAL_ARMED"
+    exit $STATE_OK
+fi
+
+if [[ $WARNING -eq $YES && $CRITICAL -eq $NO ]] 
+then
+    WARNING_ARMED=$FALSE
+    CRITICAL_ARMED=$TRUE
+    echo "WARNING $1 @ $RESULT $2|$1_$2=$RESULT;$3;$4;0 WARNING_ARMED=$WARNING_ARMED CRITICAL_ARMED=$CRITICAL_ARMED"
+    exit $STATE_WARNING
+fi
+
+if [ $CRITICAL -eq $YES ]
+then
+    WARNING_ARMED=$FALSE
+    CRITICAL_ARMED=$FALSE
+    echo "CRITICAL $1 @ $RESULT $2|$1_$2=$RESULT;$3;$4;0 WARNING_ARMED=$WARNING_ARMED CRITICAL_ARMED=$CRITICAL_ARMED"
+    exit $STATE_CRITICAL
+fi
+
+if [[ $WARNING -eq $ERR || $CRITICAL -eq $ERR ]]
+then
+    WARNING_ARMED=$TRUE
+    CRITICAL_ARMED=$TRUE
+    echo "UNKNOWN $! invalid range"
+    exit $STATE_UNKNOWN
+fi
+
 
