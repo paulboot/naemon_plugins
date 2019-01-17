@@ -4,10 +4,7 @@
 
 """XXX Nagios plugin to check XXX"""
 
-#ToDo:
-#-Per afdeling-id ophalen
-
-#VOORBEELD: 
+#Example: 
 ## met twee contexts en in verbose mode meerdere regels output!
 ## second context is not a scalar but a text output scalar, just used for reporting.
 
@@ -46,19 +43,19 @@ pickle_file = '_check_uitloop_all.pkl'
 #Parsed data format
 # <item>
     # <pubDate>Tue, 03 May 2018 09:21:51 GMT</pubDate>
-    # <title>Uitloop Cardiologie - dr. v.d. Plas: 25 minuten.</title>
+    # <title>Uitloop Cardiologie - dr. v.d. P: 25 minuten.</title>
     # <link>http://localhost/iDoc.Web.Services/PlanService/GetFeed.aspx?ID=uitloop</link>
-    # <description>Uitloop Cardiologie - dr. v.d. Plas: 25 minuten.</description>
+    # <description>Uitloop Cardiologie - dr. v.d. P: 25 minuten.</description>
     # <logisp:type>uitloop</logisp:type>
     # <logisp:department>A00104</logisp:department>
     # <logisp:departmentname>Cardiologie</logisp:departmentname>
     # <logisp:routeinfo></logisp:routeinfo>
     # <logisp:shortrouteinfo></logisp:shortrouteinfo>
-    # <logisp:resource>dr. v.d. Plas</logisp:resource>
+    # <logisp:resource>dr. v.d. P</logisp:resource>
     # <logisp:uitloopminuten>25</logisp:uitloopminuten>
 # </item>
 
-# Parse title line: 'Uitloop Cardiologie - dr. v.d. Plas: 30 minuten'
+# Parse title line: 'Uitloop Cardiologie - dr. v.d. P: 25 minuten'
 
 _log = logging.getLogger('nagiosplugin')
 
