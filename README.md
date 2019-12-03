@@ -2,7 +2,7 @@
 
 Collection of useful check plugins
 
-Example config how to test proxy downloads, the HTTP GET haeder is tricky to get it right. In this example once every hour a 10MiB file is downloaded from a fictive test server.
+Example config how to test proxy downloads, the HTTP GET haeder is tricky to get it right. In this example once every hour a 10MiB file is downloaded from a test server.
 
 ```
 define service {
