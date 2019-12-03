@@ -1,0 +1,337 @@
+#! /usr/bin/perl -w
+
+use strict;
+use Data::Dumper;
+use Getopt::Long;
+use lib "/usr/lib/nagios/plugins" ;
+use utils qw(&print_revision &support &usage);
+
+my ( $opt_V , $opt_d, $opt_D, $limits, $opt_h );
+my $progname = (split '/',$0)[-1];
+my $revision = "1.".qw$Revision: 6 $[1];
+my $upsc = "/bin/upsc";
+
+sub print_help ();
+sub print_usage ();
+sub compare ($$$);
+
+# this can be syntax checked, %ERRORS can't
+sub ERRORS_OK       () { $utils::ERRORS{'OK'}       };
+sub ERRORS_WARNING  () { $utils::ERRORS{'WARNING'}  };
+sub ERRORS_CRITICAL () { $utils::ERRORS{'CRITICAL'} };
+sub ERRORS_UNKNOWN  () { $utils::ERRORS{'UNKNOWN'}  };
+
+$ENV{'PATH'}='';
+$ENV{'BASH_ENV'}=''; 
+$ENV{'ENV'}='';
+
+Getopt::Long::Configure('bundling');
+GetOptions
+	("V"    => \$opt_V,  "version"        => \$opt_V,
+	 "d=s"  => \$opt_d,  "device=s"       => \$opt_d,
+	 "D"    => \$opt_D,  "debug"          => \$opt_D,
+	 "v=s%" => \$limits, "value=s%"       => \$limits,
+	 "h"    => \$opt_h,  "help"           => \$opt_h,
+);
+
+if ($opt_V) {
+	print_revision($progname,$revision);
+	exit ERRORS_OK;
+}
+
+if ($opt_h) {
+	print_help(); 
+	exit ERRORS_OK;
+}
+
+if (! $opt_d) {
+	usage("Device not specified\n");
+	exit ERRORS_UNKNOWN;
+}
+
+if ($opt_D) {
+	print "DEBUG\n";
+}
+
+if ( ! keys %$limits ) {
+	usage "you have to specify some value to check\n";
+	exit ERRORS_UNKNOWN;
+}
+
+# check if UPSd is running
+my @psCmd = ( "/bin/ps","h","-C","upsd" );
+open PS,"-|",@psCmd or do {
+	print "NUT Daemon maybe DOWN because '@psCmd' returned '$?': $!\n";
+	exit ERRORS_UNKNOWN;
+};
+my @psOut = <PS>;
+close PS;
+
+# read current values from UPSd
+open UPSC,"-|",$upsc,$opt_d or do {
+	print "$0 line ",__LINE__,": can't run '$upsc $opt_d': $!";
+	exit ERRORS_UNKNOWN;
+};
+my @lines = <UPSC>; 
+close UPSC;
+
+my $upsData = {};
+
+for my $line (@lines) {
+	chomp($line);
+	my($key,$val) = split /: /,$line,2;
+	$upsData->{$key} = $val;
+}
+
+my $alarmlevel = ERRORS_OK;
+my @critmesg = ();
+my @warnmesg = ();
+my @okmesg = ();
+
+for my $key ( keys %$limits ) {
+	if ( ! defined $upsData->{$key} ) {
+		print "key '$key' is not defined in output from $upsc\n";
+		exit ERRORS_UNKNOWN;
+	}
+	my $limstring = $limits->{$key};
+	my @kvtriples = split /:/,$limstring;
+	my $cmp = {};
+	for my $kvtriple ( @kvtriples ) {
+		if ( $kvtriple =~ /^(c|w)(>=|>|==|=|<>|<=|<|!=|!~|~)(.*?)$/ ) {
+			my ($severity,$op,$value) = ($1,$2,$3);
+			push @{$cmp->{$severity}},  { op => $op, value => $value };
+			$opt_D and print "KV3: ($severity,$op,$value)\n";
+		} else {
+			print "ERROR: '$kvtriple' is invalid\n";
+			exit ERRORS_UNKNOWN;
+		}
+	}
+
+	$opt_D and print Dumper ($cmp);
+
+	# catch critical errors:
+	if ( defined $cmp->{c} ) {  
+		$opt_D and print "Cc\n";
+		my $cnthits = 0;
+		for my $comparison ( @{$cmp->{c}} ) {
+			$opt_D and print "$key $upsData->{$key} $comparison->{op} $comparison->{value}\n";
+			if ( compare(
+				$upsData->{$key},
+				$comparison->{op},
+				$comparison->{value}
+				) ) {
+
+				$opt_D and print "E: $upsData->{$key} $comparison->{op} $comparison->{value}\n";
+				push @critmesg, "E: $upsData->{$key} $comparison->{op} $comparison->{value}";
+				if ( $alarmlevel < ERRORS_CRITICAL ) {
+					$alarmlevel = ERRORS_CRITICAL;
+				}
+				$cnthits++;
+			}
+		}
+		$cnthits and next;
+	}
+
+	# catch warnings:
+	if ( defined $cmp->{w} ) { 
+		$opt_D and print "Cw\n";
+		my $cnthits = 0;
+		for my $comparison ( @{$cmp->{w}} ) {
+			if ( compare(
+				$upsData->{$key},
+				$comparison->{op},
+				$comparison->{value}
+				) ) {
+
+				$opt_D and print "W: $upsData->{$key} $comparison->{op} $comparison->{value}\n";
+				push @warnmesg, "W: $upsData->{$key} $comparison->{op} $comparison->{value}";
+				if ( $alarmlevel < ERRORS_WARNING ) {
+					$alarmlevel = ERRORS_WARNING;
+				}
+				$cnthits++;
+			}
+		}
+		$cnthits and next;
+	}
+	$opt_D and print "O: $key=$upsData->{$key}\n";
+	push @okmesg,"OK: $key=$upsData->{$key} ";
+	#dev# print "O: $upsData->{$key} ! $cmp->{w}->{op} $cmp->{w}->{value}\n";
+	# push @okmesg,"OK: $key=$upsData->{$key} !" . (
+	# 	(defined $cmp->{w} )?
+	# 	("$cmp->{w}->{op} $cmp->{w}->{value}"):
+	# 	("$cmp->{c}->{op} $cmp->{c}->{value}")
+	# );
+}
+
+print join "\n",
+	@critmesg,
+	@warnmesg,
+	@okmesg,
+	"";
+
+exit $alarmlevel;
+
+##
+## end of program
+##
+
+sub compare ($$$) {
+	my ( $val, $op, $limit ) = @_;
+	#dev# print "( $limit, $op, $val )\n";
+
+	if ( $op eq ">=" ) {
+		( $val >= $limit ) and return 1;
+		return 0;
+	}
+	if ( $op eq ">" ) {
+		( $val > $limit ) and return 1;
+		return 0;
+	}
+	if ( $op eq "<=" ) {
+		( $val <= $limit ) and return 1;
+		return 0;
+	}
+	if ( $op eq "<" ) {
+		( $val < $limit ) and return 1;
+		return 0;
+	}
+	if ( $op eq "==" ) {
+		( $val eq $limit ) and return 1;
+		return 0;
+	}
+	if ( $op eq "=" ) {
+		( $val == $limit ) and return 1;
+		return 0;
+	}
+	if ( $op eq "<>" ) {
+		( $val != $limit ) and return 1;
+		return 0;
+	}
+	if ( $op eq "!=" ) {
+		( $val ne $limit ) and return 1;
+		return 0;
+	}
+	if ( $op eq "~" ) {
+		( $val =~ $limit ) and return 1;
+		return 0;
+	}
+	if ( $op eq "!~" ) {
+		( $val !~ $limit ) and return 1;
+		return 0;
+	}
+	return 0;
+}
+
+sub print_usage () {
+	print join "\n",
+		"Usage:",
+		"$progname -d DEVICE -v CHECK_DESC [ -v CHECK_DESC ... ]",
+		"",
+		"DEVICE := a device description upsc would accept",
+		"CHECK_DESC := UPSCKEY '=' SEVERITY OPERATOR VALUE [ ':' SEVERITY OPERATOR VALUE ] ...",
+		"UPSCKEY : key string as listed by upsc, see 'man upsc'",
+		"SEVERITY := { 'w' | 'c' } ( 'w' for warning, 'c' for critical errors )",
+		"    'w' : warning",
+		"    'c' : critical errors",
+		"OPERATOR := { '>=' | '>' | '<=' | | '<' '==' | '=' | '<>' | '!=' | '~' | '!~' }",
+		"    '>=' : numerical comparison, reported value is greater or equal than VALUE ",
+		"    '>'  : numerical comparison, reported value is greater than VALUE ",
+		"    '<=' : numerical comparison, reported value is less or equal than VALUE ",
+		"    '<'  : numerical comparison, reported value is less than VALUE ",
+		"    '='  : numerical comparison, reported value is equal to VALUE ",
+		"    '<>' : numerical comparison, reported value is not equal to VALUE ",
+		"    '==' : string comparison, reported value is identical to VALUE ",
+		"    '!=' : string comparison, reported value is not identical to VALUE ",
+		"    '~'  : regex match, reported value matches the perl regular expression ",
+		"           given by VALUE ",
+		"    '!~' : regex match, reported value does not match the perl regular ",
+		"           expression given by VALUE ",
+		"    (for perl regular expressions see 'man perlre') ",
+		"VALUE : the value representing the preset, might be a string, integer ",
+		"        or float, depending on OPERATOR",
+		"",
+		q#EXAMPLES:#,
+		q#  classic:#,
+		q#    command[check_ups_load]=/usr/lib/nagios/plugins/check_nut_plus   \\#,
+		q#      -d ups17@localhost  -v "ups.load=w>90:c>=98"#,
+		q##,
+		q#      raise warning if the value reported by "ups.load" is #,
+		q#      greater than "90" and raise critical error if it is #,
+		q#      "greater or equal than "98"#,
+		q##,
+		q#  observe a fixed value:#,
+		q#    command[check_ups_Ubat]=/usr/lib/nagios/plugins/check_nut_plus    \\#,
+		q#      -d ups@localhost  -v "battery.voltage=c!=27.0"#,
+		q##,
+		q#      raise critical error if the value reported by #,
+		q#      "battery.voltage" it not equal to 27.0#,
+		q##,
+		q#  observe multiple fixed strings:#,
+		q#    command[check_ups_model]=/usr/lib/nagios/plugins/check_nut_plus   \\#,
+		q#      -d myups  -v "device.mfr=c!=MGE UPS SYSTEMS" \\#,
+		q#      -v "device.model=c!=Evolution 1150" -v "device.serial=w!=AV4H4301K"#,
+		q##,
+		q#      raise critical error if "device.mfr" or "device.model"#,
+		q#      are not the specified ones.#,
+		q#      raise warning if "device.serial" has changed#,
+		q#      so you can see if someone has been tinkering ;-)#,
+		q##,
+		q#  window discrimitation:#,
+		q#    command[check_ups_Uin]=/usr/lib/nagios/plugins/check_nut_plus     \\#,
+		q#    -d otherups@somehost  -v "input.voltage=w>=238:c>=240:w<=225:c<=220"#,
+		q##,
+		q#      critical error on input.voltage >=240 or c<=220#,
+		q#      no error on input.voltage < 238 and > 220#,
+		q#      warning otherwise#,
+		q##;
+		q#SEE ALSO:#,
+		q# perlre(1), upsc(8), http://www.networkupstools.org/, nrpe(8)#,
+		q##,
+		q##;
+}
+		
+sub print_help () {
+	print_revision($progname,$revision);
+	print join "\n",
+		"Copyright (c) 2013 Chris Recktenwald for LiHAS http://lihas.de",
+                "Copyright (c) 2007 Luca Bertoncello <lucabert\@lucabert.de>",
+		"",
+		"This plugin reports the status of the UPS using NUT",
+		"",
+	print_usage();
+	print "\n";
+	support();
+}
+__END__
+
+if($uStatus ne 'OL') {
+  # s. /usr/share/doc/nut/new-drivers.txt.gz
+    for my $stat  (split ' ', $uStatus) {
+      if ($stat eq 'OL') {
+          print "OL = On line (mains is present)\n";
+      } elsif ($stat eq 'OB') {
+          print "OB = On battery (mains is not present)\n";
+      } elsif ($stat eq 'LB') {
+          print "LB = Low battery\n";
+      } elsif ($stat eq 'RB') {
+          print "RB = The battery needs to be replaced\n";
+      } elsif ($stat eq 'CHRG') {
+          print "CHRG = The battery is charging\n";
+      } elsif ($stat eq 'DISCHRG') {
+          print "DISCHRG = The battery is discharging (inverter is providing load power)\n";
+      } elsif ($stat eq 'BYPASS') {
+          print "BYPASS = UPS bypass circuit is active - no battery protection is available\n";
+      } elsif ($stat eq 'CAL') {
+          print "CAL = UPS is currently performing runtime calibration (on battery)\n";
+      } elsif ($stat eq 'OFF') {
+          print "OFF = UPS is offline and is not supplying power to the load\n";
+      } elsif ($stat eq 'OVER') {
+          print "OVER = UPS is overloaded\n";
+      } elsif ($stat eq 'TRIM') {
+          print "TRIM = UPS is trimming incoming voltage (called 'buck' in some hardware)\n";
+      } elsif ($stat eq 'BOOST') {
+          print "BOOST = UPS is boosting incoming voltage\n";
+      }
+    }
+}
+
