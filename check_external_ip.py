@@ -1,5 +1,6 @@
 #!/usr/bin/python
- 
+
+# 28/12/2019 Changed to https and changed www.icanhazip.com to icanhazip.com
 # Import the necessary python modules.
 
 from urllib2 import Request, urlopen, URLError, HTTPError
@@ -39,13 +40,13 @@ args = vars(parser.parse_args())
 
 
 if args['ipv4'] == True:
-    url= Request("http://ipv4.icanhazip.com")
+    url= Request("https://ipv4.icanhazip.com")
     ipAddressFile='/tmp/.external_ip_address_ipv4'
 elif args['ipv6'] == True:
-    url= Request("http://ipv6.icanhazip.com")
+    url= Request("https://ipv6.icanhazip.com")
     ipAddressFile='/tmp/.external_ip_address_ipv6'
 else:
-    url = Request("http://www.icanhazip.com")
+    url = Request("https://icanhazip.com")
     ipAddressFile='/tmp/.external_ip_address'
 
 # Try and connect to the URL, and report any failures
