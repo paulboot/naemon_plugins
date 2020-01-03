@@ -3,12 +3,16 @@
 use experimental 'smartmatch';
 
 # RFC3621 PoE MIB
-# snmpwalk -v 2c -c public <hostname> mib-2.105
+# snmpwalk -On -v 2c -c public <hostname> mib-2.105
 
 #
-# check_poe - nagios plugin 
+# check_poe - nagios plugin
 #
-# by Frank Bulk <frnkblk@iname.com> 
+# by Frank Bulk <frnkblk@iname.com>
+# Paul Boot <paulboot@gmail.com>
+#   fix1 zero ports feeding power (devision by zero)
+#   fix2 devide power usage by 1000 for HPE OfficeConnect Switch 1820 8G
+#   add1 results and metrics
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
@@ -80,10 +84,12 @@ my $output = "";
 my $hostname;
 my $community = "public";
 my $port = 161;
-my $opt_w = 85;
-my $opt_c = 95;
+my $opt_w = 85;  # percentage of max power used
+my $opt_c = 95;  # percentage of max power used
 my $critical = 0;
 my $warning = 0;
+my $results;
+my $metrics;
 my %alarmstate;
 my $temp_string;
 my $temp_calc;
@@ -96,9 +102,13 @@ my %PsePortDetectionStatus;
 my $slot;
 my $interface_num;
 my @oid_array;
-my $deliveringPower;
+my $deliveringPower = 0;
 my $designatedPower;
-my %PoEClass =( 
+my $percUsedPower;
+my $percAllocatedPower;
+my $unAllocatedPower;
+my $averageServedPower;
+my %PoEClass =(
 	'0'=> 0,
 	'1'=> 3.84,
 	'2'=> 6.49,
@@ -118,7 +128,7 @@ my $key;
 
 ## main program
 
-# Just in case of problems, let's not hang 
+# Just in case of problems, let's not hang
 $SIG{'ALRM'} = sub {
 	print ("ERROR: No snmp response from $hostname (alarm)\n");
 	exit $ERRORS{"UNKNOWN"};
@@ -145,6 +155,7 @@ if ($status == 0 || $needhelp) {
 } # end if getting options fails or the user wants help
 
 # check MainPseOperStatus
+
 $MainPseOperStatus = snmp_get_request($hostname, $port, "2c", $community, "1.3.6.1.2.1.105.1.3.1.1.3.1");
 if ($MainPseOperStatus eq 3) {
 	$critical++;
@@ -156,33 +167,43 @@ foreach my $key (keys %bla) {
 	$designatedPower += $PoEClass{$bla{$key}-1};
 }
 
+# POWER-ETHERNET-MIB::pethMainPsePower.1 .1.3.6.1.2.1.105.1.3.1.1.2.1
 $MainPsePower = snmp_get_request($hostname, $port, "2c", $community, "1.3.6.1.2.1.105.1.3.1.1.2.1");
+# POWER-ETHERNET-MIB::pethMainPseConsumptionPower.1 .1.3.6.1.2.1.105.1.3.1.1.4.1
 $MainPseConsumptionPower = snmp_get_request($hostname, $port, "2c", $community, "1.3.6.1.2.1.105.1.3.1.1.4.1");
-$temp_calc = $MainPseConsumptionPower / $MainPsePower * 100;
-$statusmsg .= sprintf ("\n$MainPseConsumptionPower watts used out of $MainPsePower watts available (%.1f%% used)", $temp_calc);
-$temp_calc = $designatedPower / $MainPsePower * 100;
-$statusmsg .= sprintf ("\n$designatedPower watts allocated out of $MainPsePower watts available (%.1f%% allocated)", $temp_calc);
-if ($temp_calc >= $opt_c) {
-	$critical++;
-	$errmsg .= sprintf("\nThe allocated power of %.1f%% is over the critcial threshold of $opt_c%%", $temp_calc);
+
+# Optional correct for HP switch device by 1000 becasue some switches report usage in mWatt but should be in Watt
+if ($MainPsePower >= 5000) {
+  $MainPsePower = $MainPsePower / 1000;
+	$MainPseConsumptionPower = $MainPseConsumptionPower / 1000;
 }
-elsif ($temp_calc >= $opt_w) {
+$percUsedPower = $MainPseConsumptionPower / $MainPsePower * 100;
+$statusmsg .= sprintf ("\n$MainPseConsumptionPower watts used out of $MainPsePower watts available (%.1f%% used)", $percUsedPower);
+$percAllocatedPower = $designatedPower / $MainPsePower * 100;
+$statusmsg .= sprintf ("\n$designatedPower watts allocated out of $MainPsePower watts available (%.1f%% allocated)", $percAllocatedPower);
+if ($percAllocatedPower >= $opt_c) {
+	$critical++;
+	$errmsg .= sprintf("\nThe allocated power of %.1f%% is over the critcial threshold of $opt_c%%", $percAllocatedPower);
+}
+elsif ($percAllocatedPower >= $opt_w) {
 	$warning++;
-	$errmsg .= sprintf("\nThe allocated power of %.1f%% is over the warning threshold of $opt_w%%", $temp_calc);
+	$errmsg .= sprintf("\nThe allocated power of %.1f%% is over the warning threshold of $opt_w%%", $percAllocatedPower);
 }
 
 $MainPseUsageThreshold = snmp_get_request($hostname, $port, "2c", $community, "1.3.6.1.2.1.105.1.3.1.1.5.1");
-if (($MainPseUsageThreshold) && ($temp_calc > $MainPseUsageThreshold)) {
+if (($MainPseUsageThreshold) && ($percUsedPower > $MainPseUsageThreshold)) {
 	$warning++;
-	$errmsg .= sprintf("\nThe allocated power of %.1f%% is over the system usage threshold of %.1f%%", $temp_calc, $MainPseUsageThreshold);
-} 
-
-$temp_calc = $MainPsePower - $designatedPower;
-if ($temp_calc < 15.4) {
-	$warning++;
-	$errmsg .= sprintf("\nOnly %.1f watts if left, not enough for one Class 4 device needing an allocation of 15.4 watts", $temp_calc);
+	$errmsg .= sprintf("\nThe measured power of %.1f%% is over the system usage threshold of %.1f%%", $percUsedPower, $MainPseUsageThreshold);
 }
 
+$unAllocatedPower = $MainPsePower - $designatedPower;
+if ($unAllocatedPower < 25.5) {
+	$warning++;
+	$errmsg .= sprintf("\nOnly %.1f watts unallocated, not enough for one Class 4 device needing an allocation of 25.5 watts", $unAllocatedPower);
+}
+
+# POWER-ETHERNET-MIB::pethPsePortDetectionStatus .1.3.6.1.2.1.105.1.1.1.6
+# disabled(1), searching(2), deliveringPower(3), fault(4), test(5), otherFault(6)
 %PsePortDetectionStatus = snmp_get_table($hostname, $port, "2c", $community, "1.3.6.1.2.1.105.1.1.1.6");
 foreach my $key (keys %PsePortDetectionStatus) {
 	if (($PsePortDetectionStatus{$key} eq 4) || ($PsePortDetectionStatus{$key} eq 6)) {
@@ -196,11 +217,18 @@ foreach my $key (keys %PsePortDetectionStatus) {
 		$deliveringPower++;
 	}
 }
-if ($deliveringPower eq 1) {
-	$statusmsg .= sprintf("\n$deliveringPower port is being served power for an average of %.1f watts/port", $MainPseConsumptionPower/$deliveringPower);
+
+if ($deliveringPower eq 0) {
+	$averageServedPower = 0;
+	$statusmsg .= sprintf("\n$deliveringPower ports are being served power");
+}
+elsif ($deliveringPower eq 1) {
+	$averageServedPower = $MainPseConsumptionPower/$deliveringPower;
+	$statusmsg .= sprintf("\n$deliveringPower port is being served power for an average of %.1f watts/port", $averageServedPower);
 }
 else {
-	$statusmsg .= sprintf("\n$deliveringPower ports are being served power for an average of %.1f watts/port", $MainPseConsumptionPower/$deliveringPower);
+	$averageServedPower = $MainPseConsumptionPower/$deliveringPower;
+	$statusmsg .= sprintf("\n$deliveringPower ports are being served power for an average of %.1f watts/port", $averageServedPower);
 }
 
 # Test if this is a Cisco device that is power monitor capable
@@ -233,12 +261,17 @@ if ($critical) {
 	$state = "OK";
 } # end if we have warnings or not
 
+$results = sprintf(" Power Used=%.1f%% Power Allocated=%.1f%% Ports Powered=%u Average Power Served=%.1f Watts/port", $percUsedPower, $percAllocatedPower, $deliveringPower, $averageServedPower);
+# Add statitics to status line
+# powerused=XX%;;;; powerallocated=xx%;warn;crit;; portspowered=XX;;;0; averagepowerserved=XX;;;0;
+$metrics = sprintf("|powerused=%.1f%%;;;0; powerallocated=%.1f%%;$opt_w;$opt_c;0; portspowered=%u;;;0; averagepowerserved=%.1f;;;0;", $percUsedPower, $percAllocatedPower, $deliveringPower, $averageServedPower);
+
 if (($critical) || ($warning)) {
 	$answer = "critical: $critical warning: $warning";
-	$output = "$state: $answer$errmsg$statusmsg";
+	$output = "$state$results$metrics: $answer$errmsg$statusmsg";
 }
 else {
-	$output = "$state$statusmsg";
+	$output = "$state$results$metrics$statusmsg";
 }
 
 # setup final message
@@ -259,7 +292,7 @@ Frank Bulk <frnkblk\@iname.com>
 Usage:
   check_poe (-C|--snmpcommunity) <read_community>
                  (-H|--hostname) <hostname>
-                 [-p|--port] <port> 
+                 [-p|--port] <port>
 
 END
 	exit $ERRORS{"UNKNOWN"};
@@ -339,5 +372,3 @@ sub snmp_get_table {
 
         return %{$snmp_result};
 }
-
-
