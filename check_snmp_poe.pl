@@ -2,14 +2,14 @@
 
 use experimental 'smartmatch';
 
-# RFC3621 PoE MIB
-# snmpwalk -On -v 2c -c public <hostname> mib-2.105
+# Devices must support RFC3621 PoE MIB test first with:
+#  snmpwalk -On -v 2c -c public <hostname> mib-2.105
 
 #
 # check_poe - nagios plugin
 #
-# by Frank Bulk <frnkblk@iname.com>
-# Paul Boot <paulboot@gmail.com>
+# by Frank Bulk <frnkblk@iname.com> (version 1.0)
+# Paul Boot <paulboot@gmail.com> (version 1.1)
 #   fix1 zero ports feeding power (devision by zero)
 #   fix2 devide power usage by 1000 for HPE OfficeConnect Switch 1820 8G
 #   add1 results and metrics
@@ -37,7 +37,7 @@ use experimental 'smartmatch';
 #	# 'check_poe' command definition
 #	define command {
 #	        command_name check_poe
-#	        command_line $USER1$/check_poe -H $HOSTADDRESS$ -C $ARG1$
+#	        command_line $USER1$/check_poe -H $HOSTADDRESS$ -C $ARG1$ -w $ARG2$ -c $ARG3$
 #	}
 #
 # Here is a suggested service configuration:
@@ -59,7 +59,7 @@ use File::Basename;
 &Getopt::Long::config('auto_abbrev');
 use IO::Socket;
 
-my $version = "1.0";
+my $version = "1.1";
 my $status;
 my $needhelp = '';
 my $TIMEOUT = 30;
@@ -84,8 +84,10 @@ my $output = "";
 my $hostname;
 my $community = "public";
 my $port = 161;
-my $opt_w = 85;  # percentage of max power used
-my $opt_c = 95;  # percentage of max power used
+my $opt_w_default = 85;  # percentage of max power allocated
+my $opt_c_default = 95;  # percentage of max power allocated
+my $opt_w = $opt_w_default;
+my $opt_c = $opt_c_default;
 my $critical = 0;
 my $warning = 0;
 my $results;
@@ -97,8 +99,9 @@ my $MainPseOperStatus;
 my $MainPseUsageThreshold;
 my $MainPsePower;
 my $MainPseConsumptionPower;
-my %bla;
+my %PowerClassication;
 my %PsePortDetectionStatus;
+my %ExtPsePortAdditionalStatus;
 my $slot;
 my $interface_num;
 my @oid_array;
@@ -135,9 +138,10 @@ $SIG{'ALRM'} = sub {
 };
 alarm($TIMEOUT);
 
-# we must have -some- arguments
-if (scalar(@ARGV) == 0) {
+# we must have 4 arguments -C public -H <hostname>
+if ($#ARGV < 3) {
 	usage();
+	exit $ERRORS{"UNKNOWN"};
 } # end if no options
 
 Getopt::Long::Configure("no_ignore_case");
@@ -152,6 +156,7 @@ $status = GetOptions(
 
 if ($status == 0 || $needhelp) {
 	usage();
+	exit $ERRORS{"UNKNOWN"};
 } # end if getting options fails or the user wants help
 
 # check MainPseOperStatus
@@ -162,9 +167,10 @@ if ($MainPseOperStatus eq 3) {
 	$errmsg .= "\nThe operational status of the main PSE is faulty";
 }
 
-%bla = snmp_get_table($hostname, $port, "2c", $community, "1.3.6.1.2.1.105.1.1.1.10");
-foreach my $key (keys %bla) {
-	$designatedPower += $PoEClass{$bla{$key}-1};
+#POWER-ETHERNET-MIB::pethPsePortPowerClassifications.1.1  .1.3.6.1.2.1.105.1.1.1.10
+%PowerClassication = snmp_get_table($hostname, $port, "2c", $community, "1.3.6.1.2.1.105.1.1.1.10");
+foreach my $key (keys %PowerClassication) {
+	$designatedPower += $PoEClass{$PowerClassication{$key}-1};
 }
 
 # POWER-ETHERNET-MIB::pethMainPsePower.1 .1.3.6.1.2.1.105.1.3.1.1.2.1
@@ -232,15 +238,16 @@ else {
 }
 
 # Test if this is a Cisco device that is power monitor capable
+# CISCO-POWER-ETHERNET-EXT-MIB MIB .1.3.6.1.4.1.9.9.402
 if (($warning || $critical) && (snmp_get_request($hostname, $port, "2c", $community, "1.3.6.1.4.1.9.9.402.1.3.1.3.1") eq 1)) {
 #print "DEBUG: Cisco device\n";
-	%bla = snmp_get_table($hostname, $port, "2c", $community, "1.3.6.1.4.1.9.9.402.1.2.1.5");
+	%ExtPsePortAdditionalStatus = snmp_get_table($hostname, $port, "2c", $community, "1.3.6.1.4.1.9.9.402.1.2.1.5");
 	foreach my $key (sort keys %PsePortDetectionStatus) {
 		if (($PsePortDetectionStatus{$key} eq 4) || ($PsePortDetectionStatus{$key} eq 6)) {
 			@oid_array = split (/\./, $key);
 			$interface_num = pop(@oid_array);
 			$slot = pop(@oid_array);
-			$temp_calc = hex($bla{"1.3.6.1.4.1.9.9.402.1.2.1.5." . $slot . "." . $interface_num});
+			$temp_calc = hex($ExtPsePortAdditionalStatus{"1.3.6.1.4.1.9.9.402.1.2.1.5." . $slot . "." . $interface_num});
 			if ($temp_calc ~~ [ 0 .. 2 ] ) {
 				$warning++;
 				$errmsg .= "\nNote that interface $slot/$interface_num $cpeExtPsePortAdditionalStatus{$temp_calc}";
@@ -284,18 +291,23 @@ exit $ERRORS{$state};
 # the usage of this program (duh)
 sub usage
 {
+	my $ME = basename($0);
 	print <<END;
-== check_poe v$version ==
-Perl SNMP check PoE plugin for Nagios
+$ME v$version
+This plugin checks the PoE usage over SNMP for devices supporting RFC3621 POWER-ETHERNET-MIB
 Frank Bulk <frnkblk\@iname.com>
 
 Usage:
-  check_poe (-C|--snmpcommunity) <read_community>
+  $ME (-C|--snmpcommunity) <read_community>
                  (-H|--hostname) <hostname>
                  [-p|--port] <port>
+                 [-w] <warning percentage of power allocated, default: $opt_w_default>
+                 [-c] <critical percentage of power allocated, default: $opt_c_default>
+
+Example:
+  $ME -C public -H 192.168.3.1 -w 75 -c 95
 
 END
-	exit $ERRORS{"UNKNOWN"};
 }
 
 sub snmp_get_request {
@@ -319,7 +331,7 @@ sub snmp_get_request {
 
         if (!defined($snmp_result)) {
 #               print "\nERROR: Trying to obtain $sysdescr from $ip. $session->error.\n";
-                sleep 5;
+                sleep 2;
                 $snmp_result = $session->get_request(
                         -varbindlist => [$sysdescr]
                 );
