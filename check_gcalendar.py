@@ -69,7 +69,7 @@ class Calendar(nagiosplugin.Resource):
                 if (event['summary'].startswith("Uren ") or
                         event['summary'].startswith("Vrij")):
                     _log.info("Gevonden summary: " + event['summary'])
-                    return event
+                    return event['summary']
         return ''
 
 
@@ -91,7 +91,10 @@ class UrenContext(nagiosplugin.Context):
         if metric.valueunit == '':
             return self.result_cls(nagiosplugin.Critical, metric=metric)
         else:
-            return self.result_cls(nagiosplugin.Ok, metric=metric)
+            if '?' in metric.valueunit:
+                return self.result_cls(nagiosplugin.Critical, metric=metric)
+            else:
+                return self.result_cls(nagiosplugin.Ok, metric=metric)
 
 
 @nagiosplugin.guarded
