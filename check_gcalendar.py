@@ -89,12 +89,15 @@ class UrenContext(nagiosplugin.Context):
             :class:`~.state.ServiceState` object
         """
         if metric.valueunit == '':
-            return self.result_cls(nagiosplugin.Critical, metric=metric)
+            return self.result_cls(nagiosplugin.Critical,
+                                   'no valid entry found', metric)
         else:
             if '?' in metric.valueunit:
-                return self.result_cls(nagiosplugin.Critical, metric=metric)
+                return self.result_cls(nagiosplugin.Warn,
+                                       'found ? in entry', metric)
             else:
-                return self.result_cls(nagiosplugin.Ok, metric=metric)
+                return self.result_cls(nagiosplugin.Ok,
+                                       'found valid entry', metric)
 
 
 @nagiosplugin.guarded
@@ -118,7 +121,8 @@ def main():
         '/etc/naemon/secrets/gsecrets.json', scopes=SCOPES)
     gcalendar = build('calendar', 'v3', credentials=gcredentials)
 
-    check = nagiosplugin.Check(Calendar(gcalendar), UrenContext('calendar'))
+    check = nagiosplugin.Check(Calendar(gcalendar),
+                               UrenContext('calendar'))
     check.main(args.verbose)
 
 
