@@ -12,6 +12,7 @@ from google.oauth2 import service_account
 import argparse
 import nagiosplugin
 import logging
+import re
 
 _log = logging.getLogger('nagiosplugin')
 
@@ -38,13 +39,20 @@ class Calendar(nagiosplugin.Resource):
     """ Subclass of Resource to collecte the resource
 
     A Google calendar will be queried for a "Uren" entry today
+
+    Formatting of hours: "Uren: NP8 IP0 Km: K MBoZ K"
+                         "Uren: NP10 A1 S2 V2 Km: K"
+                         "Vrij:"
+
     """
 
     def __init__(self, gcalendar):
         self.gcalendar = gcalendar
 
     def probe(self):
-        return [nagiosplugin.Metric('calendar', self.eventlist())]
+        return [nagiosplugin.Metric('calendar', self.eventlist()),
+                nagiosplugin.Metric('hour', 2, min=0, max=24),
+                nagiosplugin.Metric('km', 20, min=0, max=300)]
 
     def eventlist(self):
         # 2020-06-18T19:55:01.874999Z
@@ -71,6 +79,25 @@ class Calendar(nagiosplugin.Resource):
                     _log.info("Gevonden summary: " + event['summary'])
                     return event['summary']
         return ''
+
+    def eventgethourskms(self, eventsummary):
+        """ Parse event validate and return hours and kms
+
+        :param string: eventsummary
+           example: "Uren: NP10 A1 S2 V2 Km: K MKBoZ K"
+        :returns: :int: hours
+                  :int: kms
+        """
+        try:
+            m = re.match(r'Uren: (.+) Km: (.+)', eventsummary)
+
+        hourall, kmall = m.groups()
+        for custhour in hourall.split():
+            m = re.match(r'(\w{1,2})(\d{1,2})', custhour)
+            cust, hour = m.groups()
+
+        # return False
+        return True
 
 
 class UrenContext(nagiosplugin.Context):
