@@ -66,7 +66,7 @@ class Calendar(nagiosplugin.Resource):
             # _log.debug(event)
             if (event['start']['dateTime'] == now_start_rfc and
                     event['end']['dateTime'] == now_end_rfc):
-                if (event['summary'].startswith("Uren ") or
+                if (event['summary'].startswith("Uren: ") or
                         event['summary'].startswith("Vrij")):
                     _log.info("Gevonden summary: " + event['summary'])
                     return event['summary']
