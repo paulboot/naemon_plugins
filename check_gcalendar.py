@@ -91,18 +91,17 @@ class Calendar(nagiosplugin.Resource):
            example: "Uren: NP10 A1 S2 V2 Km: K MKBoZ K"
         :returns: :int: hours
         """
-        try:
-            m = re.match(r'Uren: (.+) Km: (.+)', eventsum)
-        except Exception:
-            raise
+        # eventsum = 'Uren: NP10 AZ10 S V2 Km: K MKBoZ K'
+        m = re.match(r'Uren: (.+) Km: (.+)', eventsum)
+        if not m:
+            raise ValueError('Invalid hour and/or km in re.match')
 
         hours = 0
         hourall, kmall = m.groups()
         for custhour in hourall.split():
-            try:
-                m = re.match(r'(\w{1,2})(\d{1,2})', custhour)
-            except Exception:
-                raise
+            m = re.match(r'([A-Z]{1,2})(\d{1,2})(?!.+)', custhour)
+            if not m:
+                raise ValueError('Invalid hour sequence in re.match')
             hours += int(m.group(2))
 
         return hours
