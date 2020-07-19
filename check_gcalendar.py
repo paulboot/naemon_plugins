@@ -54,10 +54,10 @@ class Calendar(nagiosplugin.Resource):
 
     def probe(self):
         eventsum = self._eventsum()
-        if eventsum != '':
-            eventhours = self._eventgethours(eventsum)
-        else:
+        if eventsum.startswith("Vrij"):
             eventhours = 0
+        else:
+            eventhours = self._eventgethours(eventsum)
         return [nagiosplugin.Metric('calendar', eventsum),
                 nagiosplugin.Metric('hour', eventhours, min=0, max=24)]
 
@@ -73,6 +73,9 @@ class Calendar(nagiosplugin.Resource):
                                               maxResults=10, singleEvents=True,
                                               orderBy='startTime').execute()
 
+        return self._eventgetsummary(events, now_start_rfc, now_end_rfc)
+
+    def _eventgetsummary(self, events, now_start_rfc, now_end_rfc):
         eventsum = ''
         for event in events['items']:
             # _log.debug(event)
@@ -82,6 +85,8 @@ class Calendar(nagiosplugin.Resource):
                         event['summary'].startswith("Vrij")):
                     _log.info("Found summary: " + event['summary'])
                     eventsum = event['summary']
+                else:
+                    raise ValueError('Invalid hour and/or free description')
         return eventsum
 
     def _eventgethours(self, eventsum):
