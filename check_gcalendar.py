@@ -30,7 +30,7 @@ SCOPES = ['https://www.googleapis.com/auth/calendar.readonly']
 TIMEZONE = 'Europe/Amsterdam'
 EVENTSTART = '2020-06-18T08:00:00'
 EVENTEND = '2020-06-18T08:30:00'
-SUMMARY = 'Uren NP 8? KM MeldkmrBOZ?'
+SUMMARY = 'Uren: NP 8? KM MeldkmrBOZ?'
 EVENT = {
     'summary': SUMMARY,
     'start': {'dateTime': EVENTSTART, 'timeZone': TIMEZONE},
@@ -58,6 +58,7 @@ class Calendar(nagiosplugin.Resource):
             eventhours = 0
         else:
             eventhours = self._eventgethours(eventsum)
+
         return [nagiosplugin.Metric('calendar', eventsum),
                 nagiosplugin.Metric('hour', eventhours, min=0, max=24)]
 
@@ -97,17 +98,18 @@ class Calendar(nagiosplugin.Resource):
         :returns: :int: hours
         """
         # eventsum = 'Uren: NP10 AZ10 S V2 Km: K MKBoZ K'
-        m = re.match(r'Uren: (.+) Km: (.+)', eventsum)
-        if not m:
-            raise ValueError('Invalid hour and/or km in re.match')
-
         hours = 0
-        hourall, kmall = m.groups()
-        for custhour in hourall.split():
-            m = re.match(r'([A-Z]{1,2})(\d{1,2})(?!.+)', custhour)
+        if eventsum != '':
+            m = re.match(r'Uren: (.+) Km: (.+)', eventsum)
             if not m:
-                raise ValueError('Invalid hour sequence in re.match')
-            hours += int(m.group(2))
+                raise ValueError('Invalid hour and/or km in re.match')
+
+            hourall, kmall = m.groups()
+            for custhour in hourall.split():
+                m = re.match(r'([A-Z]{1,2})(\d{1,2})\?', custhour)
+                if not m:
+                    raise ValueError('Invalid hour sequence in re.match')
+                hours += int(m.group(2))
 
         return hours
 
