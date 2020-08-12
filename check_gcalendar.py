@@ -106,7 +106,7 @@ class Calendar(nagiosplugin.Resource):
 
             hourall, kmall = m.groups()
             for custhour in hourall.split():
-                m = re.match(r'([A-Z]{1,2})(\d{1,2})\?', custhour)
+                m = re.match(r'([A-Z]{1,2})(\d{1,2})\?{0,1}', custhour)
                 if not m:
                     raise ValueError('Invalid hour sequence in re.match')
                 hours += int(m.group(2))
