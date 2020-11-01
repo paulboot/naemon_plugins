@@ -65,13 +65,14 @@ class Calendar(nagiosplugin.Resource):
     def _eventsum(self):
         # 2020-06-18T19:55:01.874999Z
         now = datetime.utcnow() - timedelta(days=1)
-        now_start_rfc = now.strftime("%Y-%m-%dT08:00:00+02:00")
-        now_end_rfc = now.strftime("%Y-%m-%dT08:30:00+02:00")
+        now_start_rfc = now.strftime("%Y-%m-%dT08:00:00+01:00")
+        now_end_rfc = now.strftime("%Y-%m-%dT08:30:00+01:00")
 
         events = self.gcalendar.events().list(calendarId='paulboot@gmail.com',
                                               timeMin=now_start_rfc,
                                               timeMax=now_end_rfc,
-                                              maxResults=10, singleEvents=True,
+                                              maxResults=10,
+                                              singleEvents=True,
                                               orderBy='startTime').execute()
 
         return self._eventgetsummary(events, now_start_rfc, now_end_rfc)
@@ -79,7 +80,7 @@ class Calendar(nagiosplugin.Resource):
     def _eventgetsummary(self, events, now_start_rfc, now_end_rfc):
         eventsum = ''
         for event in events['items']:
-            # _log.debug(event)
+            _log.debug(event)
             if (event['start']['dateTime'] == now_start_rfc and
                     event['end']['dateTime'] == now_end_rfc):
                 if (event['summary'].startswith("Uren: ") or
