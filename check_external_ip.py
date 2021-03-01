@@ -11,6 +11,7 @@ from os import path
 import argparse
 
 user_agent = 'Mozilla/4.0 (compatible; MSIE 5.5; Windows NT)'
+user_agent = 'Mozilla/5.0'
 # Setup our help output.
 
 parser = argparse.ArgumentParser(
