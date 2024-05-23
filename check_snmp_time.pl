@@ -1,4 +1,4 @@
-#!/usr/bin/perl -w 
+#!/usr/bin/perl -w
 ############################## check_snmp_time.pl #################
 my $Version='1.2';
 # Date    : Dec 08 2010
@@ -28,6 +28,9 @@ my $Version='1.2';
 # susie112:~ > snmpget -v 1 -c SECro 192.168.98.109 1.3.6.1.2.1.25.1.2.0
 # HOST-RESOURCES-MIB::hrSystemDate.0 = STRING: 2010-12-10,14:27:59.0
 
+# Eaton does not support hrSystemDate and implements own alternative
+# snmpwalk -v 2c -c public up1.bocuse.nl SNMPv2-SMI::enterprises.534.1.10.5.0
+# SNMPv2-SMI::enterprises.534.1.10.5.0 = STRING: "03/31/2022 21:23:52"
 
 use strict;
 use Net::SNMP 5.0;
@@ -87,7 +90,7 @@ sub help {
 This plugin queries the remote systems time through SNMP and compares it against the local time on the Nagios server. This identifies systems with no correct time set and sends alarms if the time is off to far.
 
 -v, --verbose
-   print extra debugging information 
+   print extra debugging information
 -h, --help
    print this help message
 -H, --hostname=HOST
@@ -97,13 +100,13 @@ This plugin queries the remote systems time through SNMP and compares it against
 -2, --v2c
    Use snmp v2c
 -l, --login=LOGIN ; -x, --passwd=PASSWD
-   Login and auth password for snmpv3 authentication 
-   If no priv password exists, implies AuthNoPriv 
+   Login and auth password for snmpv3 authentication
+   If no priv password exists, implies AuthNoPriv
 -X, --privpass=PASSWD
    Priv password for snmpv3 (AuthPriv protocol)
 -L, --protocols=<authproto>,<privproto>
    <authproto> : Authentication protocol (md5|sha : default md5)
-   <privproto> : Priv protocole (des|aes : default des) 
+   <privproto> : Priv protocole (des|aes : default des)
 -P, --port=PORT
    SNMP port (Default 161)
 -o, --tzoffset=MINS
@@ -133,7 +136,7 @@ sub check_options {
 	'l:s'	=> \$o_login,		'login:s'	=> \$o_login,
 	'x:s'	=> \$o_passwd,		'passwd:s'	=> \$o_passwd,
 	'X:s'	=> \$o_privpass,	'privpass:s'	=> \$o_privpass,
-	'L:s'	=> \$v3protocols,	'protocols:s'	=> \$v3protocols,   
+	'L:s'	=> \$v3protocols,	'protocols:s'	=> \$v3protocols,
         't:i'   => \$o_timeout,       	'timeout:i'     => \$o_timeout,
 	'V'	=> \$o_version,		'version'	=> \$o_version,
 	'2'     => \$o_version2,        'v2c'           => \$o_version2,
@@ -142,12 +145,12 @@ sub check_options {
         'o:i'   => \$o_tzoff,           'tzoffset:s'    => \$o_tzoff,
 	);
     # Basic checks
-    if (defined($o_timeout) && (isnnum($o_timeout) || ($o_timeout < 2) || ($o_timeout > 60))) 
+    if (defined($o_timeout) && (isnnum($o_timeout) || ($o_timeout < 2) || ($o_timeout > 60)))
       { print "Timeout must be >1 and <60 !\n"; print_usage(); exit $ERRORS{"UNKNOWN"}}
     if (!defined($o_timeout)) {$o_timeout=5;}
     if (defined ($o_help) ) { help(); exit $ERRORS{"UNKNOWN"}};
     if (defined($o_version)) { p_version(); exit $ERRORS{"UNKNOWN"}};
-    if ( ! defined($o_host) ) # check host and filter 
+    if ( ! defined($o_host) ) # check host and filter
       { print_usage(); exit $ERRORS{"UNKNOWN"}}
     # check snmp information
     if ( !defined($o_community) && (!defined($o_login) || !defined($o_passwd)) )
@@ -163,17 +166,17 @@ sub check_options {
         print "Put snmp V3 priv login info with priv protocols!\n"; print_usage(); exit $ERRORS{"UNKNOWN"}}
     }
     # Check remote timezone offset
-    if (defined($o_tzoff) && (isnnum($o_tzoff) || ($o_tzoff < -600) || ($o_tzoff > 600))) 
+    if (defined($o_tzoff) && (isnnum($o_tzoff) || ($o_tzoff < -600) || ($o_tzoff > 600)))
       { print "Timezone offset must be > -600 and < 600 !\n"; print_usage(); exit $ERRORS{"UNKNOWN"}}
     # Check warnings and critical
     if (!defined($o_warn) || !defined($o_crit))
  	{ print "put warning and critical info!\n"; print_usage(); exit $ERRORS{"UNKNOWN"}}
     # Get rid of % sign
-    $o_warn =~ s/\%//g; 
+    $o_warn =~ s/\%//g;
     $o_crit =~ s/\%//g;
-    if ( isnnum($o_warn) || isnnum($o_crit) ) 
+    if ( isnnum($o_warn) || isnnum($o_crit) )
 		{ print "Numeric value for warning or critical !\n";print_usage(); exit $ERRORS{"UNKNOWN"}}
-    if ($o_warn > $o_crit) 
+    if ($o_warn > $o_crit)
             { print "warning <= critical ! \n";print_usage(); exit $ERRORS{"UNKNOWN"}}
 }
 
@@ -209,7 +212,7 @@ if ( defined($o_login) && defined($o_passwd)) {
       -authprotocol	=> $o_authproto,
       -translate        => 0,
       -timeout          => $o_timeout
-    );  
+    );
   } else {
     verb("SNMPv3 AuthPriv login : $o_login, $o_authproto, $o_privproto");
     ($session, $error) = Net::SNMP->session(
@@ -271,7 +274,7 @@ if (!defined($result)) {
 
 $session->close;
 
-if (!defined ($$result{$remote_time_oid})) {
+if (!defined ($$result{$remote_time_oid}) || $$result{$remote_time_oid} eq "" ) {
   print "No time information : UNKNOWN\n";
   exit $ERRORS{"UNKNOWN"};
 }
@@ -308,7 +311,7 @@ if ( abs($offset) > $o_crit ) {
 if ( abs($offset) > $o_warn ) {
    # output warn error only if no critical was found
    if ($exit_val eq $ERRORS{"OK"}) {
-     print " ($offset > +/-$o_warn) : WARNING"; 
+     print " ($offset > +/-$o_warn) : WARNING";
      $exit_val=$ERRORS{"WARNING"};
    }
 }

@@ -31,6 +31,11 @@
     <link rel="alternate stylesheet" type="text/css" media="screen" title="orange-theme" href="css/color/orange.css" />
     <link rel="alternate stylesheet" type="text/css" media="screen" title="purple-theme" href="css/color/purple.css" />
 
+    <!-- Le HTML5 shim, for IE6-8 support of HTML5 elements -->
+    <!--[if lt IE 9]>
+      <script src="http://html5shim.googlecode.com/svn/trunk/html5.js"></script>
+      <script src="js/respond.min.js"></script>
+    <![endif]-->
     <script language="JavaScript">
 	Firefox = navigator.userAgent.indexOf("Firefox") >= 0;
 	if(Firefox) document.write("<link rel='stylesheet' href='css/moz.css' type='text/css'>"); 
@@ -45,14 +50,116 @@
     <!--BEGIN HEADER-->
     <div id="header" role="banner">
        <a id="menu-link" class="head-button-link menu-hide" href="#menu"><span>Menu</span></a>
-       <!--Logo--><a href="index.html">
-                    <div class="pagetitle">
-                        <h1>RTT and LOSS</h1> 
-                        <div class="clearfix"></div></a>
-                    </div>
-        <!--Logo END-->
+       <!--Logo--><a href="dashboard.html" class="logo"><h1>Reinier de Graaf</h1></a><!--Logo END-->
        
        <div class="right">
+       
+       <!--message box-->
+         <div class="dropdown left">
+          
+          <a class="dropdown-toggle head-button-link" data-toggle="dropdown" href="#"><span class="notice-new">3</span></a> 
+          
+          <div class="dropdown-menu pull-right messages-list">
+          <div class="triangle"></div>
+          
+            <div class="notice-title">You Have 3 Massages</div>
+            <!--message #1-->
+            <div class="notice-message">
+            <a href="#" class="box">
+              <div class="avatar"><img src="images/avatar-2.png" alt=""></div>
+              <div class="info">
+                <div class="author">Csaba Gyulai</div>
+                <div class="date">Jan 9, 2013</div>
+                <div class="clearfix"></div>
+                <div class="text">This is Photoshop's version  of Lorem Ipsum. Proin gravida nibh vel velit.</div>
+              </div>
+              <div class="clearfix"></div>
+            </a>
+            </div>
+            <!--message #2-->
+            <div class="notice-message">
+            <a href="#" class="box">
+              <div class="avatar"><img src="images/avatar-3.png" alt=""></div>
+              <div class="info">
+                <div class="author">Junkyard Sam</div>
+                <div class="date">Jan 15, 2013</div>
+                <div class="clearfix"></div>
+                <div class="text">This is Photoshop's version  of Lorem Ipsum. Proin gravida nibh vel velit.</div>
+              </div>
+              <div class="clearfix"></div>
+            </a>
+            </div>
+            <!--message #3-->
+            <div class="notice-message">
+            <a href="#" class="box">
+              <div class="avatar"><img src="images/avatar-4.png" alt=""></div>
+              <div class="info">
+                <div class="author">Lienke Raben</div>
+                <div class="date">Nov 4, 2012</div>
+                <div class="clearfix"></div>
+                <div class="text">This is Photoshop's version  of Lorem Ipsum. Proin gravida nibh vel velit.</div>
+              </div>
+              <div class="clearfix"></div>
+            </a>
+            </div>
+           
+            <a href="#" class="notice-more">View All Messages</a>
+          </div>
+        </div>
+       <!--message box end-->
+       
+       <!--notification box-->
+         <div class="dropdown left">
+          <a class="dropdown-toggle head-button-link notification" data-toggle="dropdown" href="#"><span class="notice-new">2</span></a>
+          
+          <div class="dropdown-menu pull-right messages-list">
+          <div class="triangle"></div>
+          
+            <div class="notice-title">You Have 2 Notifications</div>
+            <!--message #1-->
+            <div class="notice-message">
+            <a href="#" class="box">
+              <div class="avatar"><img src="images/avatar-5.png" alt=""></div>
+              <div class="info">
+                <div class="author">Jonas Anderson</div>
+                <div class="date">3 hours ago</div>
+                <div class="clearfix"></div>
+                <div class="text">Followed <span class="follow-link">Dennis Salvatier</span></div>
+              </div>
+              <div class="clearfix"></div>
+            </a>
+            </div>
+            <!--message #2-->
+            <div class="notice-message">
+            <a href="#" class="box">
+              <div class="avatar"><img src="images/avatar-6.png" alt=""></div>
+              <div class="info">
+                <div class="author">Ilias Sounas</div>
+                <div class="date">19 hours ago</div>
+                <div class="clearfix"></div>
+                <div class="text">Commented on <span class="comment-link">Angry Cloud</span></div>
+              </div>
+              <div class="clearfix"></div>
+            </a>
+            </div>
+            <!--message #3-->
+            <div class="notice-message">
+            <a href="#" class="box">
+              <div class="avatar"><img src="images/avatar-7.png" alt=""></div>
+              <div class="info">
+                <div class="author">Erin Hunting</div>
+                <div class="date">19 hours ago</div>
+                <div class="clearfix"></div>
+                <div class="text">Liked <span class="like-link">Overnight work</span></div>
+              </div>
+              <div class="clearfix"></div>
+            </a>
+            </div>
+           
+            <a href="#" class="notice-more">View All Notification</a>
+          </div>
+        </div>
+       <!--notification box end-->
        
        <!--config box-->
          <div class="dropdown left">
@@ -84,7 +191,14 @@
         <div id="main" role="main">
           <div class="block">
    		  <div class="clearfix"></div>
-                      
+            
+             <!--page title-->
+             <div class="pagetitle">
+                <h1>RTT and LOSS.</h1> 
+                <div class="clearfix"></div>
+             </div>
+             <!--page title end-->
+             
               <!--Example Table-->
               <div class="grid">
               
@@ -112,7 +226,7 @@
         <div class="row">
                <!--BEGIN FOOTER-->
                <div class="footer">
-                  <div class="left">Copyright &copy; 2024</div>
+                  <div class="left">Copyright &copy; 2015</div>
                   <div class="right"><a href="#">Afdeling stafdiensten I&I</a></div>
                   <div class="clearfix"></div>
                </div>
