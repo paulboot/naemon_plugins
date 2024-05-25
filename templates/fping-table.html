@@ -6,11 +6,12 @@
                 <th>Min</th>
                 <th>Mediaan</th>
                 <th>Max</th>
+                <th>Jitter</th>
                 <th>Metingen</th>
               </tr>
             </thead>
             <tbody>
-             {%- for host in status|sort %}
+             {%- for host in status %}
               <tr>
                 <td {% if status[host]['errorlevel'] == 0 -%}
                     class="t_b_green">
@@ -19,7 +20,7 @@
                     {%- else -%}
                     class="t_b_red">
                     {%- endif -%}
-                    {{host}}</td>
+                    {{host[0]}}</td>
                 <td>{{status[host]['ip']}}</td>
                 <td>
                     {%- if status[host]['min'] -%}
@@ -50,6 +51,13 @@
                         {%- else -%}
                         <span class="s_green">{{"%.2f"|format(status[host]['max'])}}</span> 
                         {%- endif -%}
+                    {%- else -%}
+                    <span class="s_red">-.-</span>
+                    {%- endif -%}
+                </td>
+                <td>
+                    {%- if status[host]['jitter'] -%}
+                    <span class="s_green">{{"%.2f"|format(status[host]['jitter'])}}</span> 
                     {%- else -%}
                     <span class="s_red">-.-</span>
                     {%- endif -%}

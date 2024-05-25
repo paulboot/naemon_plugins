@@ -28,16 +28,13 @@ FPING = '/usr/bin/fping'
 TEMPLATE_PATH = 'templates/'
 HTML_PATH = '/var/www/html/actief/logisp.html'
 
-# Configure logging
-log = logging.getLogger('nagiosplugin')
 
-def configure_logging(verbosity: int):
-    if verbosity >= 2:
-        logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
-    elif verbosity == 1:
-        logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-    else:
-        logging.basicConfig(level=logging.WARNING, format='%(asctime)s - %(levelname)s - %(message)s')
+def setup_logging(level):
+    # Configure the logging
+    logging.basicConfig(level=level,
+                        format='%(asctime)s - %(levelname)s - %(message)s',
+                        datefmt='%Y-%m-%d %H:%M:%S')
+
 
 def dict_def_status() -> Dict[str, Any]:
     status = {
@@ -80,6 +77,19 @@ def median(lst: List[float]) -> float:
         return (sorted_list[mid - 1] + sorted_list[mid]) / 2.0
     return sorted_list[mid]
 
+def jitter(lst: List[float]) -> float:
+    if len(lst) < 2:
+        return 0.0  # Jitter is 0 if there are less than 2 round-trip times
+
+    # Calculate differences between consecutive round-trip times
+    differences = [abs(lst[i] - lst[i - 1]) for i in range(1, len(lst))]
+
+    # Calculate the average of these differences
+    jitter = sum(differences) / len(differences)
+
+    return jitter
+
+
 class RttLoss(nagiosplugin.Resource):
     """Domain model: icmp echo Round trip time (RTT) and Loss."""
 
@@ -88,8 +98,8 @@ class RttLoss(nagiosplugin.Resource):
         self.limit_loss_perc = limit_loss_perc
         self.targets = hosts
         self.targetsfile = file
-        self.packetcount = 8
-        self.packetsize = 64
+        self.packetcount = 10
+        self.packetsize = 512
         self.problemtargets = []
         self.status = {}
         self.metadata = {}
@@ -101,39 +111,39 @@ class RttLoss(nagiosplugin.Resource):
             with open(self.targetsfile) as targetsfile:
                 self.targets = [line.strip() for line in targetsfile]
 
-        cmd = [FPING, '-q', '-d', '-A', '-b', str(self.packetsize), '-C', str(self.packetcount)] + self.targets
-        log.info(f'Starting fping with "{cmd}" command')
+        cmd = [FPING, '-q', '-d', '-A', '-R', '-b', str(self.packetsize), '-C', str(self.packetcount)] + self.targets
+        logging.info(f'Starting fping with "{cmd}" command')
 
         hostshighrtt = 0
         hostshighloss = 0
         problemtargets = []
 
         self.metadata['startTimePing'] = datetime.datetime.now().strftime("%H:%M op %e %B %Y")
-        log.info(f'Stored start time: {self.metadata["startTimePing"]} in metadata dict as startTimePing')
+        logging.info(f'Stored start time: {self.metadata["startTimePing"]} in metadata dict as startTimePing')
 
         try:
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
             output = result.stderr
-            log.debug(f'Found output: "{output}"')
+            logging.debug(f'Found output: "{output}"')
 
             if result.returncode != 0:
-                log.info(f'Fping command returned non-zero exit status {result.returncode}')
+                logging.info(f'Fping command returned non-zero exit status {result.returncode}')
         except subprocess.TimeoutExpired:
-            log.error('Fping command timed out')
+            logging.error('Fping command timed out')
             raise nagiosplugin.CheckError('Fping command timed out')
         except subprocess.CalledProcessError as e:
-            log.error(f'Fping command failed: {e}')
+            logging.error(f'Fping command failed: {e}')
             raise nagiosplugin.CheckError(f'Fping command failed: {e}')
 
         for line in output.splitlines():
             line = line.strip()
-            log.info(f'Found line: "{line}"')
+            logging.info(f'Found line: "{line}"')
 
             m = re.match(r'([^ ]*)\s+\(([^ ]*)\)\s+: (.+$)', line)
             if m:
                 targetname = m.group(1)
                 targetip = ipaddress.ip_address(m.group(2))
-                log.info(f'Found result per host for target: {targetname}')
+                logging.info(f'Found result per host for target: {targetname}')
 
                 self.status[(targetname, targetip)] = {
                     'ip': targetip,
@@ -156,29 +166,31 @@ class RttLoss(nagiosplugin.Resource):
                             self.status[(targetname, targetip)]['errorlevel'] += 1
 
                 if results:
-                    log.info(f'Found results: "{results}"')
+                    logging.info(f'Found results: "{results}"')
                     self.status[(targetname, targetip)]['min'] = min(results)
-                    log.info(f'Found min: "{self.status[(targetname, targetip)]["min"]:.2f}"')
+                    logging.info(f'Found min: "{self.status[(targetname, targetip)]["min"]:.2f}"')
                     self.status[(targetname, targetip)]['avg'] = average(results)
-                    log.info(f'Found avg: "{self.status[(targetname, targetip)]["avg"]:.2f}"')
+                    logging.info(f'Found avg: "{self.status[(targetname, targetip)]["avg"]:.2f}"')
                     self.status[(targetname, targetip)]['max'] = max(results)
-                    log.info(f'Found max: "{self.status[(targetname, targetip)]["max"]:.2f}"')
+                    logging.info(f'Found max: "{self.status[(targetname, targetip)]["max"]:.2f}"')
                     self.status[(targetname, targetip)]['median'] = median(results)
-                    log.info(f'Found median: "{self.status[(targetname, targetip)]["median"]:.2f}"')
+                    logging.info(f'Found median: "{self.status[(targetname, targetip)]["median"]:.2f}"')
+                    self.status[(targetname, targetip)]['jitter'] = jitter(results)
+                    logging.info(f'Found jitter: "{self.status[(targetname, targetip)]["jitter"]:.2f}"')
 
                     if self.status[(targetname, targetip)]['median'] >= self.limit_rtt_time:
                         hostshighrtt += 1
                         problemtargets.append(targetname)
 
                 loss = (lostpackets / self.packetcount) * 100
-                log.info(f'Found loss: "{loss:.2f}"')
+                logging.info(f'Found loss: "{loss:.2f}"')
                 if loss >= self.limit_loss_perc:
                     hostshighloss += 1
                     problemtargets.append(targetname)
-        log.info(f'Found status: "{self.status}"')
+        logging.debug(f'Found status: "{self.status}"')
 
-        log.info(f'Found number of hosts with high rtt: {hostshighrtt}')
-        log.info(f'Found number of hosts with high loss: {hostshighloss}')
+        logging.info(f'Found number of hosts with high rtt: {hostshighrtt}')
+        logging.info(f'Found number of hosts with high loss: {hostshighloss}')
 
         self.generate_html()
 
@@ -187,13 +199,13 @@ class RttLoss(nagiosplugin.Resource):
     def probe(self):
         """Create check metric for number of hosts who fail rtt and loss."""
         self.rtt_hosts, self.loss_hosts, self.problem_targets = self.do_rtt_loss_tests()
-        log.info(f'Probe results - RTT: {self.rtt_hosts}, Loss: {self.loss_hosts}, Problem Targets: {self.problem_targets}')
+        logging.info(f'Probe results - RTT: {self.rtt_hosts}, Loss: {self.loss_hosts}, Effected targets: {self.problem_targets}')
         return [nagiosplugin.Metric('rtt', self.rtt_hosts),
                 nagiosplugin.Metric('loss', self.loss_hosts)]
 
     def generate_html(self):
         """Generate HTML using the self.status dictionary."""
-        log.info('Start generating HTML in generate_html')
+        logging.info('Start generating HTML in generate_html')
         env = Environment(loader=PackageLoader('check_rttloss', TEMPLATE_PATH), autoescape=select_autoescape(['html', 'xml']))
         template = env.get_template('fping-index.html')
 
@@ -206,28 +218,25 @@ class RttLoss(nagiosplugin.Resource):
         for key in sorted_keys:
             sorted_status[key] = self.status[key]
 
-        print("###########################")
-        pprint(sorted_status)
-
-        log.info('Write HTML to file')
+        logging.info('Write HTML to file')
         with open(HTML_PATH, 'w') as file:
             file.write(template.render({'status': sorted_status, 'metadata': self.metadata}))
-        log.info('Done generating HTML in generate_html')
+        logging.info('Done generating HTML in generate_html')
 
 class RttLossSummary(nagiosplugin.Summary):
     """Create status line and long output."""
 
     def ok(self, results):
-        log.info(f'OK results: {results}')
+        logging.info(f'OK results: {results}')
         return f'{results["rtt"]}, {results["loss"]}'
 
     def problem(self, results):
-        log.info(f'Problem results: {results}')
+        logging.info(f'Problem results: {results}')
         return f'{results["rtt"]}, {results["loss"]}'
 
     def verbose(self, results):
         super().verbose(results)
-        log.info(f'Verbose results: {results}')
+        logging.info(f'Verbose results: {results}')
         if 'rtt' in results:
             return f'problem hosts: {", ".join(results["rtt"].resource.problem_targets)}'
 
@@ -244,10 +253,14 @@ def main():
                       help='critical if # of hosts with loss is outside RANGE')
     argp.add_argument('-r', '--limit-rtt-time', type=float, default=100,
                       help='limit median rtt in ms')
-    argp.add_argument('-l', '--limit-loss-perc', type=float, default=1,
+    argp.add_argument('-L', '--limit-loss-perc', type=float, default=1,
                       help='limit loss in percentage')
     argp.add_argument('-v', '--verbose', action='count', default=0,
                       help='increase output verbosity (use up to 3 times)')
+    argp.add_argument('-l', '--log', dest='log_level', action='store',
+                      choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
+                      default='ERROR',
+                      help='set the logging level (default: WARNING).')
     argp.add_argument('-t', '--timeout', type=int, default=60,
                       help='abort execution after TIMEOUT seconds')
     argp.add_argument('-H', '--hosts', nargs='+',
@@ -259,7 +272,8 @@ def main():
     args = argp.parse_args()
 
     # Configure logging based on verbosity
-    configure_logging(args.verbose)
+    log_level = args.log_level.upper()
+    setup_logging(log_level)
 
     check = nagiosplugin.Check(
         RttLoss(args.limit_rtt_time, args.limit_loss_perc, args.hosts, args.file, args.sort_by),
