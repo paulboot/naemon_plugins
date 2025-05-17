@@ -26,7 +26,7 @@ G_PREFIX = 'ping'
 # Globals
 FPING = '/usr/bin/fping'
 TEMPLATE_PATH = 'templates/'
-HTML_PATH = '/var/www/html/actief/logisp.html'
+HTML_PATH = '/var/www/html/actief/lokaal.html'
 
 
 def setup_logging(level):

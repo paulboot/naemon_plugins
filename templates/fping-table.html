@@ -4,7 +4,8 @@
                 <th>Hostnaam</th>
                 <th>IPnummer</th>
                 <th>Min</th>
-                <th>Mediaan</th>
+                <th>Gem.</th>
+                <th>Med.</th>
                 <th>Max</th>
                 <th>Jitter</th>
                 <th>Metingen</th>
@@ -28,6 +29,17 @@
                         <span class="s_orange">{{"%.2f"|format(status[host]['min'])}}</span> 
                         {%- else -%}
                         <span class="s_green">{{"%.2f"|format(status[host]['min'])}}</span> 
+                        {%- endif -%}
+                    {%- else -%}
+                    <span class="s_red">-.-</span>
+                    {%- endif -%}
+                </td>
+                <td>
+                    {%- if status[host]['avg'] -%}
+                        {%- if status[host]['avg'] > status[host]['limit_rtt_time'] -%}
+                        <span class="s_orange">{{"%.2f"|format(status[host]['avg'])}}</span> 
+                        {%- else -%}
+                        <span class="s_green">{{"%.2f"|format(status[host]['avg'])}}</span> 
                         {%- endif -%}
                     {%- else -%}
                     <span class="s_red">-.-</span>

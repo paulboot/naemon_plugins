@@ -8,6 +8,7 @@ import argparse
 import logging
 import nagiosplugin
 import re
+import os
 import datetime
 import subprocess
 from jinja2 import Environment, PackageLoader, select_autoescape
@@ -26,7 +27,7 @@ G_PREFIX = 'ping'
 # Globals
 FPING = '/usr/bin/fping'
 TEMPLATE_PATH = 'templates/'
-HTML_PATH = '/var/www/html/actief/logisp.html'
+HTML_BASE_PATH = '/var/www/html/actief'
 
 # Configure logging
 log = logging.getLogger('nagiosplugin')
@@ -80,6 +81,13 @@ def median(lst: List[float]) -> float:
         return (sorted_list[mid - 1] + sorted_list[mid]) / 2.0
     return sorted_list[mid]
 
+def jitter(lst: List[float]) -> float:
+    if len(lst) < 2:
+        return 0.0
+    diffs = [abs(lst[i] - lst[i - 1]) for i in range(1, len(lst))]
+    return sum(diffs) / len(diffs)
+
+
 class RttLoss(nagiosplugin.Resource):
     """Domain model: icmp echo Round trip time (RTT) and Loss."""
 
@@ -88,8 +96,8 @@ class RttLoss(nagiosplugin.Resource):
         self.limit_loss_perc = limit_loss_perc
         self.targets = hosts
         self.targetsfile = file
-        self.packetcount = 8
-        self.packetsize = 64
+        self.packetcount = 10
+        self.packetsize = 1250
         self.problemtargets = []
         self.status = {}
         self.metadata = {}
@@ -101,7 +109,7 @@ class RttLoss(nagiosplugin.Resource):
             with open(self.targetsfile) as targetsfile:
                 self.targets = [line.strip() for line in targetsfile]
 
-        cmd = [FPING, '-q', '-d', '-A', '-b', str(self.packetsize), '-C', str(self.packetcount)] + self.targets
+        cmd = [FPING, '-q', '-R', '-d', '-A', '-M', '-b', str(self.packetsize), '-C', str(self.packetcount)] + self.targets
         log.info(f'Starting fping with "{cmd}" command')
 
         hostshighrtt = 0
@@ -163,8 +171,12 @@ class RttLoss(nagiosplugin.Resource):
                     log.info(f'Found avg: "{self.status[(targetname, targetip)]["avg"]:.2f}"')
                     self.status[(targetname, targetip)]['max'] = max(results)
                     log.info(f'Found max: "{self.status[(targetname, targetip)]["max"]:.2f}"')
+                    # Calculate and log median
                     self.status[(targetname, targetip)]['median'] = median(results)
                     log.info(f'Found median: "{self.status[(targetname, targetip)]["median"]:.2f}"')
+                    # Calculate and log jitter
+                    self.status[(targetname, targetip)]['jitter'] = jitter(results)
+                    log.info(f'Found jitter: "{self.status[(targetname, targetip)]["jitter"]:.2f}"')
 
                     if self.status[(targetname, targetip)]['median'] >= self.limit_rtt_time:
                         hostshighrtt += 1
@@ -180,7 +192,7 @@ class RttLoss(nagiosplugin.Resource):
         log.info(f'Found number of hosts with high rtt: {hostshighrtt}')
         log.info(f'Found number of hosts with high loss: {hostshighloss}')
 
-        self.generate_html()
+        # self.generate_html()
 
         return hostshighrtt, hostshighloss, set(problemtargets)
 
@@ -188,16 +200,21 @@ class RttLoss(nagiosplugin.Resource):
         """Create check metric for number of hosts who fail rtt and loss."""
         self.rtt_hosts, self.loss_hosts, self.problem_targets = self.do_rtt_loss_tests()
         log.info(f'Probe results - RTT: {self.rtt_hosts}, Loss: {self.loss_hosts}, Problem Targets: {self.problem_targets}')
+
+        self.generate_html()
+
         return [nagiosplugin.Metric('rtt', self.rtt_hosts),
                 nagiosplugin.Metric('loss', self.loss_hosts)]
 
     def generate_html(self):
         """Generate HTML using the self.status dictionary."""
         log.info('Start generating HTML in generate_html')
-        env = Environment(loader=PackageLoader('check_rttloss', TEMPLATE_PATH), autoescape=select_autoescape(['html', 'xml']))
+
+        env = Environment(loader=PackageLoader('check_rttloss', TEMPLATE_PATH),
+                        autoescape=select_autoescape(['html', 'xml']))
         template = env.get_template('fping-index.html')
 
-        # Sort the status dictionary by the specified attribute
+        # Sort the status dictionary
         sorted_status = {}
         if self.sort_by == 'targetname':
             sorted_keys = sorted(self.status.keys(), key=lambda item: item[0])
@@ -206,13 +223,51 @@ class RttLoss(nagiosplugin.Resource):
         for key in sorted_keys:
             sorted_status[key] = self.status[key]
 
-        print("###########################")
-        pprint(sorted_status)
+        # Determine result status
+        status_folder = 'OK' if self.rtt_hosts == 0 and self.loss_hosts == 0 else 'FAILURE'
 
-        log.info('Write HTML to file')
-        with open(HTML_PATH, 'w') as file:
-            file.write(template.render({'status': sorted_status, 'metadata': self.metadata}))
+        # Get base filename from -f argument or use "manual"
+        if self.targetsfile:
+            basefile = os.path.splitext(os.path.basename(self.targetsfile))[0]
+        else:
+            basefile = 'manual'
+
+        # Build timestamp and date
+        now = datetime.datetime.now()
+        date_str = now.strftime('%Y-%m-%d')
+        timestamp_str = now.strftime('%Y-%m-%d_%H-%M')
+
+        # Construct full folder path and file path
+        folder_path = os.path.join(HTML_BASE_PATH, status_folder, basefile, date_str)
+        os.makedirs(folder_path, exist_ok=True)
+
+        filename = f'{basefile}-{timestamp_str}.html'
+        filepath = os.path.join(folder_path, filename)
+
+        # Write HTML file
+        log.info(f'Write HTML to file: {filepath}')
+        with open(filepath, 'w') as file:
+            file.write(template.render({
+                'status': sorted_status,
+                'metadata': self.metadata,
+                'STATIC_BASE': '/actief',
+                'now': datetime.datetime.now
+            }))
+
         log.info('Done generating HTML in generate_html')
+
+        # Create/update symbolic link
+        symlink_dir = os.path.join(HTML_BASE_PATH, status_folder)
+        symlink_name = f'{basefile}-latest.html'
+        symlink_path = os.path.join(symlink_dir, symlink_name)
+
+        try:
+            if os.path.islink(symlink_path) or os.path.exists(symlink_path):
+                os.remove(symlink_path)
+            os.symlink(filepath, symlink_path)
+            log.info(f'Created symlink: {symlink_path} → {filepath}')
+        except OSError as e:
+            log.warning(f'Could not create symlink {symlink_path}: {e}')
 
 class RttLossSummary(nagiosplugin.Summary):
     """Create status line and long output."""
