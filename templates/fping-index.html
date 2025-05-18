@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
   <meta charset="utf-8">
-  <title>Reinier de Graaf netwerk - Dashboard</title>
+  <title>{{ title }}</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <meta name="description" content="">
@@ -41,12 +41,12 @@
   <!-- BEGIN HEADER -->
   <div id="header" role="banner">
     <a id="menu-link" class="head-button-link menu-hide" href="#menu"><span>Menu</span></a>
-    <a href="/actief/index.html">
-      <div class="pagetitle">
-        <h1>VLAN460 Commend PRM intercom</h1>
+    <div class="pagetitle">
+        <a href="/actief/index.html">
+            <h1>{{ title }}</h1>
+        </a>
         <div class="clearfix"></div>
-      </div>
-    </a>
+    </div>
     <div class="right">
       <div class="dropdown left">
         <a class="dropdown-toggle head-button-link config" data-toggle="dropdown" href="#"></a>
@@ -82,19 +82,20 @@
             <div class="clearfix"></div>
           </div>
         </div>
-      </div>
 
       <!-- BEGIN FOOTER -->
       <div class="row">
         <div class="footer">
-          <div class="left">Copyright &copy; {{ now().year }}</div>
-          <div class="right"><a href="#">RTHA IT afdeling</a></div>
+          <div class="left">MIT License Copyright &copy; {{ now().year }} Paul Boot</div>
+          <div class="right"><a href="#">&lt;your name/company here&gt;</a></div>
           <div class="clearfix"></div>
         </div>
+        <div class="clearfix"></div>
       </div>
       <!-- END FOOTER -->
     </div>
   </div>
+  <!--/#wrapper-->
 
   <!-- JavaScript -->
   <script src="{{ STATIC_BASE }}/js/jquery.min.js"></script>

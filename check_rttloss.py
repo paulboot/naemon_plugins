@@ -91,7 +91,7 @@ def jitter(lst: List[float]) -> float:
 class RttLoss(nagiosplugin.Resource):
     """Domain model: icmp echo Round trip time (RTT) and Loss."""
 
-    def __init__(self, limit_rtt_time: float, limit_loss_perc: float, hosts: List[str], file: str, sort_by: str):
+    def __init__(self, limit_rtt_time: float, limit_loss_perc: float, hosts: List[str], file: str, sort_by: str, title: str):
         self.limit_rtt_time = limit_rtt_time
         self.limit_loss_perc = limit_loss_perc
         self.targets = hosts
@@ -100,6 +100,7 @@ class RttLoss(nagiosplugin.Resource):
         self.packetsize = 1250
         self.problemtargets = []
         self.status = {}
+        self.title = title
         self.metadata = {}
         self.sort_by = sort_by
 
@@ -243,6 +244,8 @@ class RttLoss(nagiosplugin.Resource):
 
         filename = f'{basefile}-{timestamp_str}.html'
         filepath = os.path.join(folder_path, filename)
+        #static_base = os.path.relpath(HTML_BASE_PATH, start=os.path.dirname(filepath))
+        #static_base = static_base.replace(os.sep, '/')
 
         # Write HTML file
         log.info(f'Write HTML to file: {filepath}')
@@ -251,13 +254,15 @@ class RttLoss(nagiosplugin.Resource):
                 'status': sorted_status,
                 'metadata': self.metadata,
                 'STATIC_BASE': '/actief',
-                'now': datetime.datetime.now
+                'now': datetime.datetime.now,
+                'title': self.title
             }))
 
         log.info('Done generating HTML in generate_html')
 
         # Create/update symbolic link
-        symlink_dir = os.path.join(HTML_BASE_PATH, status_folder)
+        symlink_dir = os.path.join(HTML_BASE_PATH, 'LATEST')
+        os.makedirs(symlink_dir, exist_ok=True)
         symlink_name = f'{basefile}-latest.html'
         symlink_path = os.path.join(symlink_dir, symlink_name)
 
@@ -305,6 +310,8 @@ def main():
                       help='increase output verbosity (use up to 3 times)')
     argp.add_argument('-t', '--timeout', type=int, default=60,
                       help='abort execution after TIMEOUT seconds')
+    argp.add_argument('--title', default='fpinguru Report',
+                      help='Title for the HTML report')
     argp.add_argument('-H', '--hosts', nargs='+',
                       help='one or more target hosts')
     argp.add_argument('-f', '--file',
@@ -317,7 +324,7 @@ def main():
     configure_logging(args.verbose)
 
     check = nagiosplugin.Check(
-        RttLoss(args.limit_rtt_time, args.limit_loss_perc, args.hosts, args.file, args.sort_by),
+        RttLoss(args.limit_rtt_time, args.limit_loss_perc, args.hosts, args.file, args.sort_by, args.title),
         nagiosplugin.ScalarContext('rtt', args.warning_rtt_hosts, args.critical_rtt_hosts,
                                    fmt_metric='#{value} hosts rtt failure'),
         nagiosplugin.ScalarContext('loss', args.warning_loss_hosts, args.critical_loss_hosts,
