@@ -11,11 +11,13 @@ import re
 import os
 import datetime
 import subprocess
-from jinja2 import Environment, PackageLoader, select_autoescape
+from jinja2 import Environment, FileSystemLoader, select_autoescape
+from pathlib import Path
 import locale
 from typing import List, Dict, Any
 import ipaddress
-from pprint import pprint
+import sys
+import subprocess
 
 locale.setlocale(locale.LC_ALL, 'nl_NL.UTF-8')
 
@@ -26,7 +28,7 @@ G_PREFIX = 'ping'
 
 # Globals
 FPING = '/usr/bin/fping'
-TEMPLATE_PATH = 'templates/'
+TEMPLATE_PATH = Path(__file__).parent / 'templates'
 HTML_BASE_PATH = '/var/www/html/actief'
 
 # Configure logging
@@ -110,7 +112,7 @@ class RttLoss(nagiosplugin.Resource):
             with open(self.targetsfile) as targetsfile:
                 self.targets = [line.strip() for line in targetsfile]
 
-        cmd = [FPING, '-q', '-R', '-d', '-A', '-M', '-b', str(self.packetsize), '-C', str(self.packetcount)] + self.targets
+        cmd = [FPING, '-i', '30', '-q', '-R', '-d', '-A', '-M', '-b', str(self.packetsize), '-C', str(self.packetcount)] + self.targets
         log.info(f'Starting fping with "{cmd}" command')
 
         hostshighrtt = 0
@@ -121,7 +123,7 @@ class RttLoss(nagiosplugin.Resource):
         log.info(f'Stored start time: {self.metadata["startTimePing"]} in metadata dict as startTimePing')
 
         try:
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
             output = result.stderr
             log.debug(f'Found output: "{output}"')
 
@@ -211,8 +213,10 @@ class RttLoss(nagiosplugin.Resource):
         """Generate HTML using the self.status dictionary."""
         log.info('Start generating HTML in generate_html')
 
-        env = Environment(loader=PackageLoader('check_rttloss', TEMPLATE_PATH),
-                        autoescape=select_autoescape(['html', 'xml']))
+        env = Environment(
+            loader=FileSystemLoader(str(TEMPLATE_PATH)),
+            autoescape=select_autoescape(['html', 'xml'])
+        )
         template = env.get_template('fping-index.html')
 
         # Sort the status dictionary
@@ -308,14 +312,14 @@ def main():
                       help='limit loss in percentage')
     argp.add_argument('-v', '--verbose', action='count', default=0,
                       help='increase output verbosity (use up to 3 times)')
-    argp.add_argument('-t', '--timeout', type=int, default=60,
+    argp.add_argument('-t', '--timeout', type=int, default=120,
                       help='abort execution after TIMEOUT seconds')
     argp.add_argument('--title', default='fpinguru Report',
                       help='Title for the HTML report')
     argp.add_argument('-H', '--hosts', nargs='+',
                       help='one or more target hosts')
-    argp.add_argument('-f', '--file',
-                      help='a file with target hosts')
+    argp.add_argument('-f', '--file', nargs='+',
+                      help='one or more target host files')
     argp.add_argument('-s', '--sort-by', choices=['targetname', 'targetip'], default='targetip',
                       help='sort the output by targetname or targetip')
     args = argp.parse_args()
@@ -323,14 +327,32 @@ def main():
     # Configure logging based on verbosity
     configure_logging(args.verbose)
 
-    check = nagiosplugin.Check(
-        RttLoss(args.limit_rtt_time, args.limit_loss_perc, args.hosts, args.file, args.sort_by, args.title),
-        nagiosplugin.ScalarContext('rtt', args.warning_rtt_hosts, args.critical_rtt_hosts,
-                                   fmt_metric='#{value} hosts rtt failure'),
-        nagiosplugin.ScalarContext('loss', args.warning_loss_hosts, args.critical_loss_hosts,
-                                   fmt_metric='#{value} hosts loss failure'),
-        RttLossSummary())
-    check.main(args.verbose, args.timeout)
+    if args.file and len(args.file) > 1:
+        for hostfile in args.file:
+            log.info(f'Running subprocess for hostfile: {hostfile}')
+            # Build a new argument list excluding all existing -f args and their values
+            filtered_args = []
+            skip_next = False
+            for arg in sys.argv[1:]:
+                if arg in ("-f", "--file"):
+                    break
+                filtered_args.append(arg)
+
+            # Add back the current hostfile
+            cmd = [sys.executable, sys.argv[0]] + filtered_args + ["-f", hostfile]
+            log.info(f'Subprocess command: {" ".join(cmd)}')
+            subprocess.run(cmd, timeout=120)
+        return  # Prevent continuing into check.main() again
+    else:
+        file_arg = args.file[0] if args.file else None
+        check = nagiosplugin.Check(
+            RttLoss(args.limit_rtt_time, args.limit_loss_perc, args.hosts, file_arg, args.sort_by, args.title),
+            nagiosplugin.ScalarContext('rtt', args.warning_rtt_hosts, args.critical_rtt_hosts,
+                                       fmt_metric='#{value} hosts rtt failure'),
+            nagiosplugin.ScalarContext('loss', args.warning_loss_hosts, args.critical_loss_hosts,
+                                       fmt_metric='#{value} hosts loss failure'),
+            RttLossSummary())
+        check.main(args.verbose, args.timeout)
 
 if __name__ == '__main__':
     main()
