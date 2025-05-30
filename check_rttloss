@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (c) gocept gmbh & co. kg
-# See also LICENSE.txt
+
 
 """Nagios plugin to check RTT and LOSS for a large number of hosts using fping"""
 
@@ -32,15 +31,23 @@ TEMPLATE_PATH = Path(__file__).parent / 'templates'
 HTML_BASE_PATH = '/var/www/html/actief'
 
 # Configure logging
-log = logging.getLogger('nagiosplugin')
+log = logging.getLogger()
 
 def configure_logging(verbosity: int):
+    log_file = '/opt/librenms/logs/check_rttloss.log'
+    log_level = logging.WARNING  # default
+
     if verbosity >= 2:
-        logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+        log_level = logging.DEBUG
     elif verbosity == 1:
-        logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-    else:
-        logging.basicConfig(level=logging.WARNING, format='%(asctime)s - %(levelname)s - %(message)s')
+        log_level = logging.INFO
+
+    logging.basicConfig(
+        filename=log_file,
+        filemode='a',
+        level=log_level,
+        format='%(asctime)s - %(levelname)s - %(message)s'
+    )
 
 def dict_def_status() -> Dict[str, Any]:
     status = {
@@ -105,18 +112,28 @@ class RttLoss(nagiosplugin.Resource):
         self.title = title
         self.metadata = {}
         self.sort_by = sort_by
+        self.rtt_hosts = 0
+        self.loss_hosts = 0
+        self.problem_targets = set()
+        self.rtt_problem_targets = set()
+        self.loss_problem_targets = set()
 
     def do_rtt_loss_tests(self) -> (int, int, set):
         """Return a list of RTT and LOSS per target."""
-        if not self.targets and self.targetsfile:
+        if self.targetsfile:
             with open(self.targetsfile) as targetsfile:
                 self.targets = [line.strip() for line in targetsfile]
+                log.info(f"Using host list from file: {self.targetsfile}")
+        else:
+            log.info(f"Using hosts from CLI: {self.targets}")
 
         cmd = [FPING, '-i', '30', '-q', '-R', '-d', '-A', '-M', '-b', str(self.packetsize), '-C', str(self.packetcount)] + self.targets
         log.info(f'Starting fping with "{cmd}" command')
 
         hostshighrtt = 0
         hostshighloss = 0
+        rtt_problems = []
+        loss_problems = []
         problemtargets = []
 
         self.metadata['startTimePing'] = datetime.datetime.now().strftime("%H:%M op %e %B %Y")
@@ -183,26 +200,37 @@ class RttLoss(nagiosplugin.Resource):
 
                     if self.status[(targetname, targetip)]['median'] >= self.limit_rtt_time:
                         hostshighrtt += 1
+                        rtt_problems.append(targetname)
                         problemtargets.append(targetname)
 
                 loss = (lostpackets / self.packetcount) * 100
                 log.info(f'Found loss: "{loss:.2f}"')
                 if loss >= self.limit_loss_perc:
                     hostshighloss += 1
+                    loss_problems.append(targetname)
                     problemtargets.append(targetname)
         log.info(f'Found status: "{self.status}"')
 
         log.info(f'Found number of hosts with high rtt: {hostshighrtt}')
         log.info(f'Found number of hosts with high loss: {hostshighloss}')
 
-        # self.generate_html()
+        self.problem_targets = set(problemtargets)
+        self.rtt_problem_targets = set(rtt_problems)
+        self.loss_problem_targets = set(loss_problems)
+        self.rtt_hosts = hostshighrtt
+        self.loss_hosts = hostshighloss
 
-        return hostshighrtt, hostshighloss, set(problemtargets)
+        return
 
     def probe(self):
         """Create check metric for number of hosts who fail rtt and loss."""
-        self.rtt_hosts, self.loss_hosts, self.problem_targets = self.do_rtt_loss_tests()
-        log.info(f'Probe results - RTT: {self.rtt_hosts}, Loss: {self.loss_hosts}, Problem Targets: {self.problem_targets}')
+        #self.rtt_hosts, self.loss_hosts, self.problem_targets, self.rtt_problem_targets, self.loss_problem_targets = self.do_rtt_loss_tests()
+        self.do_rtt_loss_tests()
+
+        log.info(f'Probe results - RTT: {self.rtt_hosts}, Loss: {self.loss_hosts}')
+        log.info(f'Hosts with RTT problems: {sorted(self.rtt_problem_targets)}')
+        log.info(f'Hosts with Loss problems: {sorted(self.loss_problem_targets)}')
+        log.info(f'Total Problem Targets: {self.problem_targets}')
 
         self.generate_html()
 
@@ -287,13 +315,17 @@ class RttLossSummary(nagiosplugin.Summary):
 
     def problem(self, results):
         log.info(f'Problem results: {results}')
-        return f'{results["rtt"]}, {results["loss"]}'
+        problem_hosts_rtt = results['rtt'].resource.rtt_problem_targets
+        problem_hosts_loss = results['loss'].resource.loss_problem_targets
+
+        rtt_line = f'problem hosts rtt: {", ".join(sorted(problem_hosts_rtt))}' if problem_hosts_rtt else ''
+        loss_line = f'problem hosts loss: {", ".join(sorted(problem_hosts_loss))}' if problem_hosts_loss else ''
+        detail = " ".join(filter(None, [rtt_line, loss_line]))
+        return f'{results["rtt"]}, {results["loss"]} - {detail}'
 
     def verbose(self, results):
-        super().verbose(results)
-        log.info(f'Verbose results: {results}')
-        if 'rtt' in results:
-            return f'problem hosts: {", ".join(results["rtt"].resource.problem_targets)}'
+        # Don't return anything here so Nagiosplugin doesn't add a second line
+        return ""
 
 @nagiosplugin.guarded
 def main():
@@ -326,6 +358,7 @@ def main():
 
     # Configure logging based on verbosity
     configure_logging(args.verbose)
+    log.info(f'Arguments received: {sys.argv}')
 
     if args.file and len(args.file) > 1:
         for hostfile in args.file:
