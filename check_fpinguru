@@ -20,15 +20,10 @@ import subprocess
 
 locale.setlocale(locale.LC_ALL, 'nl_NL.UTF-8')
 
-# Graphite
-G_HOST = 'localhost'
-G_PORT = 2003
-G_PREFIX = 'ping'
-
 # Globals
 FPING = '/usr/bin/fping'
 TEMPLATE_PATH = Path(__file__).parent / 'templates'
-HTML_BASE_PATH = '/var/www/html/actief'
+HTML_BASE_PATH = '/var/www/html/fping'
 
 # Configure logging
 log = logging.getLogger()
@@ -285,7 +280,7 @@ class RttLoss(nagiosplugin.Resource):
             file.write(template.render({
                 'status': sorted_status,
                 'metadata': self.metadata,
-                'STATIC_BASE': '/actief',
+                'STATIC_BASE': '/fping',
                 'now': datetime.datetime.now,
                 'title': self.title
             }))
